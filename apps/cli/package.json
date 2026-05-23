@@ -1,0 +1,23 @@
+{
+  "name": "@kb/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "kb": "./src/cli.ts"
+  },
+  "scripts": {
+    "kb": "tsx src/cli.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@effect/platform-node": "beta",
+    "@kb/vault": "workspace:*",
+    "effect": "beta"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}

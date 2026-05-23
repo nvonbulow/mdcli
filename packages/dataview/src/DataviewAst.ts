@@ -36,14 +36,4 @@ export class DataviewTaskQuery extends Data.TaggedClass("TaskQuery")<{
   readonly sort: ReadonlyArray<DataviewSortTerm>
 }> {}
 
-export class DataviewParseError extends Data.TaggedClass("ParseError")<{
-  readonly input: string
-  readonly message: string
-  readonly line: number | undefined
-}> {}
-
-export class DataviewEvaluateError extends Data.TaggedClass("EvaluateError")<{
-  readonly message: string
-}> {}
-
-export type DataviewError = DataviewParseError | DataviewEvaluateError
+export { DataviewEvaluateError, DataviewParseError, type DataviewError } from "./DataviewErrors"

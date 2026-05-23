@@ -1,14 +1,13 @@
 import { Console, Effect } from "effect"
 import { Command, Flag } from "effect/unstable/cli"
+import { Renderer, taskTableResult, type OutputFormat } from "@kb/dataview"
 import { resolveDateInput } from "../DateInput"
+import { formatFlag } from "../OutputFormat"
 import {
   dueTasks,
   openTasks,
   readProjectTasks,
   ReadVaultOptions,
-  renderGroupedOpenTasks,
-  renderRepeatTaskLine,
-  renderTaskList,
   repeatingTasks,
   todayTasks,
   validateTasks,
@@ -36,59 +35,55 @@ export const TaskCommand = TaskRoot.pipe(
   Command.withSubcommands([
     Command.make(
       "open",
-      {},
-      Effect.fn(function* () {
+      { format: formatFlag },
+      Effect.fn(function* ({ format }) {
         const root = yield* TaskRoot
         const tasks = yield* readProjectTasks(new ReadVaultOptions({ root: root.vault }))
-        yield* Console.log(renderGroupedOpenTasks(tasks))
+        yield* renderTasks(openTasks(tasks), "task open", format)
       })
     ).pipe(Command.withDescription("List all open tasks grouped by area/project")),
 
     Command.make(
       "today",
-      { date: dateFlag },
-      Effect.fn(function* ({ date }) {
+      { date: dateFlag, format: formatFlag },
+      Effect.fn(function* ({ date, format }) {
         const root = yield* TaskRoot
         const resolvedDate = yield* resolveDateInput(date, "date")
         const tasks = yield* readProjectTasks(new ReadVaultOptions({ root: root.vault }))
-        yield* Console.log(renderTaskList(todayTasks(tasks, resolvedDate)))
+        yield* renderTasks(todayTasks(tasks, resolvedDate), `task today ${resolvedDate}`, format)
       })
     ).pipe(Command.withDescription("List tasks scheduled or due on a date")),
 
     Command.make(
       "week",
-      { start: startFlag },
-      Effect.fn(function* ({ start }) {
+      { start: startFlag, format: formatFlag },
+      Effect.fn(function* ({ start, format }) {
         const root = yield* TaskRoot
         const resolvedStart = yield* resolveDateInput(start, "start")
         const tasks = yield* readProjectTasks(new ReadVaultOptions({ root: root.vault }))
-        yield* Console.log(renderTaskList(weekTasks(tasks, resolvedStart)))
+        yield* renderTasks(weekTasks(tasks, resolvedStart), `task week ${resolvedStart}`, format)
       })
     ).pipe(Command.withDescription("List tasks scheduled or due in a 7-day window")),
 
     Command.make(
       "due",
-      { date: dateFlag },
-      Effect.fn(function* ({ date }) {
+      { date: dateFlag, format: formatFlag },
+      Effect.fn(function* ({ date, format }) {
         const root = yield* TaskRoot
         const resolvedDate = yield* resolveDateInput(date, "date")
         const tasks = yield* readProjectTasks(new ReadVaultOptions({ root: root.vault }))
-        yield* Console.log(renderTaskList(dueTasks(tasks, resolvedDate)))
+        yield* renderTasks(dueTasks(tasks, resolvedDate), `task due ${resolvedDate}`, format)
       })
     ).pipe(Command.withDescription("List open tasks due on or before a date")),
 
     Command.make(
       "repeat",
-      {},
-      Effect.fn(function* () {
+      { format: formatFlag },
+      Effect.fn(function* ({ format }) {
         const root = yield* TaskRoot
         const tasks = yield* readProjectTasks(new ReadVaultOptions({ root: root.vault }))
         const repeating = repeatingTasks(tasks)
-        if (repeating.length === 0) {
-          yield* Console.log("No repeating tasks found.")
-          return
-        }
-        yield* Console.log(repeating.map(renderRepeatTaskLine).join("\n"))
+        yield* renderTasks(repeating, "task repeat", format)
       })
     ).pipe(Command.withDescription("List repeating tasks and scheduled dates")),
 
@@ -111,3 +106,8 @@ export const TaskCommand = TaskRoot.pipe(
     ).pipe(Command.withDescription("Validate task metadata invariants"))
   ])
 )
+const renderTasks = Effect.fn(function* (tasks: ReturnType<typeof openTasks>, query: string, format: OutputFormat) {
+  const renderer = yield* Renderer
+  const output = yield* renderer.render(taskTableResult(tasks, query), format)
+  yield* Console.log(output)
+})

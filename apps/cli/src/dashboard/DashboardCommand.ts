@@ -1,12 +1,18 @@
 import { Console, Effect, Option } from "effect"
 import { Argument, Command, Flag } from "effect/unstable/cli"
+import { Renderer, taskTableResult, type OutputFormat } from "@kb/dataview"
 import { resolveDateInput } from "../DateInput"
+import { formatFlag } from "../OutputFormat"
 import {
   DashboardRenderOptions,
   readProjectTasks,
   ReadVaultOptions,
-  renderDashboard,
-  type DashboardName
+  openTasks,
+  sortTasksByGroup,
+  todayTasks,
+  weekTasks,
+  type DashboardName,
+  type ParsedTask
 } from "@kb/vault"
 
 const dateFlag = Flag.string("date").pipe(
@@ -38,12 +44,12 @@ export const DashboardCommand = DashboardRoot.pipe(
   Command.withSubcommands([
     Command.make(
       "render",
-      { name: dashboardName, date: dateFlag, start: startFlag },
-      Effect.fn(function* ({ name, date, start }) {
+      { name: dashboardName, date: dateFlag, start: startFlag, format: formatFlag },
+      Effect.fn(function* ({ name, date, start, format }) {
         const root = yield* DashboardRoot
         const tasks = yield* readProjectTasks(new ReadVaultOptions({ root: root.vault }))
         const options = yield* resolveDashboardOptions(name, date, start)
-        yield* Console.log(renderDashboard(tasks, options))
+        yield* renderDashboardResult(tasks, options, format)
       })
     ).pipe(Command.withDescription("Render a dashboard to stdout"))
   ])
@@ -67,3 +73,50 @@ const resolveDashboardOptions = Effect.fn(function* (
       return new DashboardRenderOptions({ name })
   }
 })
+const renderDashboardResult = Effect.fn(function* (
+  tasks: ReadonlyArray<ParsedTask>,
+  options: DashboardRenderOptions,
+  format: OutputFormat
+) {
+  const renderer = yield* Renderer
+  const resolved = dashboardTasks(tasks, options)
+  const table = yield* renderer.render(
+    taskTableResult(resolved.tasks, `dashboard ${options.name}`, options.name),
+    format
+  )
+  const output = format === "pretty" ? `# ${resolved.title}\n\n${resolved.summary}\n\n${table}` : table
+  yield* Console.log(output)
+})
+
+const dashboardTasks = (tasks: ReadonlyArray<ParsedTask>, options: DashboardRenderOptions) => {
+  switch (options.name) {
+    case "today": {
+      const date = options.date ?? ""
+      const selected = options.date === undefined ? [] : todayTasks(tasks, options.date)
+      return {
+        title: `Today — ${date}`,
+        summary: `${selected.length} open task${plural(selected.length)} scheduled or due today.`,
+        tasks: selected
+      }
+    }
+    case "week": {
+      const start = options.start ?? ""
+      const selected = options.start === undefined ? [] : weekTasks(tasks, options.start)
+      return {
+        title: `This Week — ${start}`,
+        summary: `${selected.length} open task${plural(selected.length)} scheduled or due in this window.`,
+        tasks: selected
+      }
+    }
+    case "open": {
+      const selected = sortTasksByGroup(openTasks(tasks))
+      return {
+        title: "All Open Tasks",
+        summary: `${selected.length} open task${plural(selected.length)}.`,
+        tasks: selected
+      }
+    }
+  }
+}
+
+const plural = (count: number): string => (count === 1 ? "" : "s")

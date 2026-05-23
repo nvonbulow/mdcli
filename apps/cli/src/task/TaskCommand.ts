@@ -1,9 +1,8 @@
-import { Clock, Console, Effect, Option } from "effect"
+import { Console, Effect } from "effect"
 import { Command, Flag } from "effect/unstable/cli"
+import { resolveDateInput } from "../DateInput"
 import {
   dueTasks,
-  isoDateFromEpochMillis,
-  isIsoDate,
   openTasks,
   readProjectTasks,
   ReadVaultOptions,
@@ -13,13 +12,18 @@ import {
   repeatingTasks,
   todayTasks,
   validateTasks,
-  weekTasks,
-  type IsoDate
+  weekTasks
 } from "@kb/vault"
 
-const dateFlag = Flag.string("date").pipe(Flag.withDescription("Date in YYYY-MM-DD format"), Flag.optional)
+const dateFlag = Flag.string("date").pipe(
+  Flag.withDescription("Date as YYYY-MM-DD, today, tomorrow, yesterday, +Nd, or -Nd; defaults to today"),
+  Flag.optional
+)
 
-const startFlag = Flag.string("start").pipe(Flag.withDescription("Week start date in YYYY-MM-DD format"), Flag.optional)
+const startFlag = Flag.string("start").pipe(
+  Flag.withDescription("Week start as YYYY-MM-DD, today, tomorrow, yesterday, +Nd, or -Nd; defaults to today"),
+  Flag.optional
+)
 
 const TaskRoot = Command.make("task").pipe(
   Command.withSharedFlags({
@@ -45,7 +49,7 @@ export const TaskCommand = TaskRoot.pipe(
       { date: dateFlag },
       Effect.fn(function* ({ date }) {
         const root = yield* TaskRoot
-        const resolvedDate = yield* resolveDate(date, "date")
+        const resolvedDate = yield* resolveDateInput(date, "date")
         const tasks = yield* readProjectTasks(new ReadVaultOptions({ root: root.vault }))
         yield* Console.log(renderTaskList(todayTasks(tasks, resolvedDate)))
       })
@@ -56,7 +60,7 @@ export const TaskCommand = TaskRoot.pipe(
       { start: startFlag },
       Effect.fn(function* ({ start }) {
         const root = yield* TaskRoot
-        const resolvedStart = yield* resolveDate(start, "start")
+        const resolvedStart = yield* resolveDateInput(start, "start")
         const tasks = yield* readProjectTasks(new ReadVaultOptions({ root: root.vault }))
         yield* Console.log(renderTaskList(weekTasks(tasks, resolvedStart)))
       })
@@ -67,7 +71,7 @@ export const TaskCommand = TaskRoot.pipe(
       { date: dateFlag },
       Effect.fn(function* ({ date }) {
         const root = yield* TaskRoot
-        const resolvedDate = yield* resolveDate(date, "date")
+        const resolvedDate = yield* resolveDateInput(date, "date")
         const tasks = yield* readProjectTasks(new ReadVaultOptions({ root: root.vault }))
         yield* Console.log(renderTaskList(dueTasks(tasks, resolvedDate)))
       })
@@ -107,15 +111,3 @@ export const TaskCommand = TaskRoot.pipe(
     ).pipe(Command.withDescription("Validate task metadata invariants"))
   ])
 )
-
-const resolveDate = Effect.fn(function* (date: Option.Option<string>, flagName: string) {
-  if (Option.isSome(date)) {
-    if (!isIsoDate(date.value)) {
-      return yield* Effect.fail(new Error(`--${flagName} must use YYYY-MM-DD`))
-    }
-    return date.value
-  }
-
-  const millis = yield* Clock.currentTimeMillis
-  return isoDateFromEpochMillis(millis)
-})

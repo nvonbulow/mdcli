@@ -1,6 +1,16 @@
 import { assert, describe, it } from "@effect/vitest"
 import { ParsedTask, TaskSource } from "../src/TaskModel"
-import { dueTasks, repeatingTasks, sortTasks, todayTasks, validateTasks, weekTasks, weekWindow } from "../src/TaskQuery"
+import {
+  addDays,
+  dueTasks,
+  repeatingTasks,
+  sortTasks,
+  todayTasks,
+  validateTasks,
+  weekTasks,
+  weekWindow
+} from "../src/TaskQuery"
+import { isIsoDate } from "../src/TaskParser"
 
 const task = (overrides: Partial<ParsedTask>): ParsedTask =>
   new ParsedTask({
@@ -50,6 +60,19 @@ describe("TaskQuery", () => {
       dueTasks([later, due, overdue], "2026-05-23").map((item) => item.text),
       ["overdue", "due"]
     )
+  })
+  it("adds days across month, year, and leap-day boundaries", () => {
+    assert.strictEqual(addDays("2026-05-23", 1), "2026-05-24")
+    assert.strictEqual(addDays("2026-03-01", -1), "2026-02-28")
+    assert.strictEqual(addDays("2024-02-28", 1), "2024-02-29")
+    assert.strictEqual(addDays("2026-12-31", 1), "2027-01-01")
+  })
+
+  it("rejects invalid ISO calendar dates", () => {
+    assert.strictEqual(isIsoDate("2026-02-29"), false)
+    assert.strictEqual(isIsoDate("2024-02-29"), true)
+    assert.strictEqual(isIsoDate("tomorrow"), false)
+    assert.strictEqual(isIsoDate("2026-5-23"), false)
   })
 
   it("sorts deterministically with missing dates last", () => {

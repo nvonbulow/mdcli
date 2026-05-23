@@ -1,23 +1,25 @@
-import { Clock, Console, Effect, Option } from "effect"
+import { Console, Effect, Option } from "effect"
 import { Argument, Command, Flag } from "effect/unstable/cli"
+import { resolveDateInput } from "../DateInput"
 import {
   DashboardRenderOptions,
-  isoDateFromEpochMillis,
-  isIsoDate,
   readProjectTasks,
   ReadVaultOptions,
   renderDashboard,
-  type DashboardName,
-  type IsoDate
+  type DashboardName
 } from "@kb/vault"
 
 const dateFlag = Flag.string("date").pipe(
-  Flag.withDescription("Today dashboard date in YYYY-MM-DD format"),
+  Flag.withDescription(
+    "Today dashboard date as YYYY-MM-DD, today, tomorrow, yesterday, +Nd, or -Nd; defaults to today"
+  ),
   Flag.optional
 )
 
 const startFlag = Flag.string("start").pipe(
-  Flag.withDescription("Week dashboard start date in YYYY-MM-DD format"),
+  Flag.withDescription(
+    "Week dashboard start as YYYY-MM-DD, today, tomorrow, yesterday, +Nd, or -Nd; defaults to today"
+  ),
   Flag.optional
 )
 
@@ -54,26 +56,14 @@ const resolveDashboardOptions = Effect.fn(function* (
 ) {
   switch (name) {
     case "today": {
-      const resolvedDate = yield* resolveDate(date, "date")
+      const resolvedDate = yield* resolveDateInput(date, "date")
       return new DashboardRenderOptions({ name, date: resolvedDate })
     }
     case "week": {
-      const resolvedStart = yield* resolveDate(start, "start")
+      const resolvedStart = yield* resolveDateInput(start, "start")
       return new DashboardRenderOptions({ name, start: resolvedStart })
     }
     case "open":
       return new DashboardRenderOptions({ name })
   }
-})
-
-const resolveDate = Effect.fn(function* (date: Option.Option<string>, flagName: string) {
-  if (Option.isSome(date)) {
-    if (!isIsoDate(date.value)) {
-      return yield* Effect.fail(new Error(`--${flagName} must use YYYY-MM-DD`))
-    }
-    return date.value as IsoDate
-  }
-
-  const millis = yield* Clock.currentTimeMillis
-  return isoDateFromEpochMillis(millis)
 })

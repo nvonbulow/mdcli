@@ -1,3 +1,7 @@
+import * as Effect from "effect/Effect"
+import * as Layer from "effect/Layer"
+import * as Context from "effect/Context"
+import type { DataviewRenderError } from "./DataviewErrors"
 import type {
   DataviewColumn,
   DataviewGroup,
@@ -9,7 +13,27 @@ import type {
 
 export type OutputFormat = "pretty" | "markdown" | "json"
 
-export const renderDataviewResult = (result: DataviewResult, format: OutputFormat): string => {
+export type DataviewRendererService = {
+  readonly render: (result: DataviewResult) => Effect.Effect<string, DataviewRenderError>
+}
+
+export class DataviewRenderer extends Context.Service<DataviewRenderer, DataviewRendererService>()(
+  "@kb/dataview/DataviewRenderer"
+) {
+  static get layerPretty(): Layer.Layer<DataviewRenderer> {
+    return rendererLayer("pretty", renderPrettyTable)
+  }
+
+  static get layerMarkdown(): Layer.Layer<DataviewRenderer> {
+    return rendererLayer("markdown", renderMarkdownTable)
+  }
+
+  static get layerJson(): Layer.Layer<DataviewRenderer> {
+    return rendererLayer("json", renderJson)
+  }
+}
+
+export function renderDataviewResult(result: DataviewResult, format: OutputFormat): string {
   switch (format) {
     case "json":
       return renderJson(result)
@@ -20,9 +44,11 @@ export const renderDataviewResult = (result: DataviewResult, format: OutputForma
   }
 }
 
-export const renderJson = (result: DataviewResult): string => JSON.stringify(resultEnvelope(result), null, 2)
+export function renderJson(result: DataviewResult): string {
+  return JSON.stringify(resultEnvelope(result), null, 2)
+}
 
-export const renderMarkdownTable = (result: DataviewResult): string => {
+export function renderMarkdownTable(result: DataviewResult): string {
   const table = tableParts(result)
   if (table.columns.length === 0) {
     return "No rows found."
@@ -36,7 +62,7 @@ export const renderMarkdownTable = (result: DataviewResult): string => {
   ].join("\n")
 }
 
-export const renderPrettyTable = (result: DataviewResult): string => {
+export function renderPrettyTable(result: DataviewResult): string {
   const table = tableParts(result)
   if (table.columns.length === 0 || table.rows.length === 0) {
     return "No rows found."
@@ -52,11 +78,26 @@ export const renderPrettyTable = (result: DataviewResult): string => {
   return [header, rule, ...rows].join("\n")
 }
 
+type RendererImplementation = (result: DataviewResult) => string
+
 type TableParts = {
   readonly columns: ReadonlyArray<DataviewColumn>
   readonly rows: ReadonlyArray<DataviewRow>
   readonly groups: ReadonlyArray<DataviewGroup>
   readonly metadata: DataviewMetadata
+}
+
+function rendererLayer(name: OutputFormat, implementation: RendererImplementation): Layer.Layer<DataviewRenderer> {
+  return Layer.effect(
+    DataviewRenderer,
+    Effect.sync(() =>
+      DataviewRenderer.of({
+        render: Effect.fn(`DataviewRenderer.${name}`)((result: DataviewResult) =>
+          Effect.succeed(implementation(result))
+        )
+      })
+    )
+  )
 }
 
 const tableParts = (result: DataviewResult): TableParts => {

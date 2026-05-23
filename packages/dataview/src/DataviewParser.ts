@@ -1,4 +1,6 @@
-import { Effect } from "effect"
+import * as Context from "effect/Context"
+import * as Effect from "effect/Effect"
+import * as Layer from "effect/Layer"
 import {
   DataviewExpression,
   DataviewGroupTerm,
@@ -14,7 +16,24 @@ const wherePattern = /^WHERE\s+(.+)$/i
 const groupPattern = /^GROUP\s+BY\s+(.+)$/i
 const sortPattern = /^SORT\s+(.+)$/i
 
-export const parseDataviewQuery = (input: string): Effect.Effect<DataviewTaskQuery, DataviewParseError> => {
+export type DataviewParserService = {
+  readonly parse: (queryText: string) => Effect.Effect<DataviewTaskQuery, DataviewParseError>
+}
+
+export class DataviewParser extends Context.Service<DataviewParser, DataviewParserService>()(
+  "@kb/dataview/DataviewParser"
+) {
+  static readonly layerNoDeps: Layer.Layer<DataviewParser> = Layer.effect(
+    this,
+    Effect.sync(() => this.of({ parse }))
+  )
+}
+
+const parse = Effect.fn("DataviewParser.parse")((input: string) => parseQuery(input))
+
+export const parseDataviewQuery = parse
+
+const parseQuery = (input: string): Effect.Effect<DataviewTaskQuery, DataviewParseError> => {
   const lines = queryLines(input)
   const kind = lines[0]
   if (kind === undefined) {

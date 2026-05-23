@@ -3,6 +3,7 @@ import { IsoDate, ParsedTask, TaskSource } from "./TaskModel"
 
 const taskLinePattern = /^\s*-\s+\[([ xX])\]\s+(.*)$/
 const fieldStartPattern = /^([A-Za-z][A-Za-z0-9_-]*)::\s*/
+const tagPattern = /#[A-Za-z0-9/_-]+/g
 const knownFields = new Set(["scheduled", "due", "completed", "depends", "repeat", "area", "project"])
 
 export const isIsoDate = (value: string): value is IsoDate => {
@@ -62,6 +63,7 @@ export const parseTaskLine = (line: string, path: string, lineNumber: number): O
       source: new TaskSource({ path, lineNumber }),
       fields,
       unknownFields,
+      tags: extractTags(body),
       ...dateField("scheduled", fields.scheduled),
       ...dateField("due", fields.due),
       ...dateField("completed", fields.completed),
@@ -102,6 +104,16 @@ export const extractInlineFields = (input: string): Readonly<Record<string, stri
   }
 
   return fields
+}
+export const extractTags = (input: string): ReadonlyArray<string> => {
+  const tags: Array<string> = []
+  for (const match of input.matchAll(tagPattern)) {
+    const tag = match[0]
+    if (!tags.includes(tag)) {
+      tags.push(tag)
+    }
+  }
+  return tags
 }
 
 const findInlineFieldClose = (input: string, valueStart: number): number => {

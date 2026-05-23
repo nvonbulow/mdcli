@@ -1,24 +1,25 @@
 {
-  "name": "@kb/cli",
+  "name": "@kb/dataview",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "bin": {
-    "kb": "./src/cli.ts"
+  "exports": {
+    "./package.json": "./package.json",
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
   },
   "scripts": {
-    "kb": "tsx src/cli.ts",
+    "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@effect/platform-node": "beta",
     "@kb/vault": "workspace:*",
-    "@kb/dataview": "workspace:*",
     "effect": "beta"
   },
   "devDependencies": {
+    "@effect/vitest": "beta",
     "@types/node": "^24.10.1",
-    "tsx": "^4.20.6",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.13"
   }
 }

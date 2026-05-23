@@ -14,6 +14,7 @@ export class ParsedTask extends Schema.Class<ParsedTask>("@kb/vault/ParsedTask")
   source: TaskSource,
   fields: Schema.Record(Schema.String, Schema.String),
   unknownFields: Schema.Record(Schema.String, Schema.String),
+  tags: Schema.Array(Schema.String),
   scheduled: Schema.optionalKey(IsoDate),
   due: Schema.optionalKey(IsoDate),
   completed: Schema.optionalKey(IsoDate),

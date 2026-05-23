@@ -19,6 +19,7 @@ const task = (overrides: Partial<ParsedTask>): ParsedTask =>
     source: new TaskSource({ path: "vault/30-Projects/Test.md", lineNumber: 1 }),
     fields: {},
     unknownFields: {},
+    tags: ["#task"],
     area: "[[Personal]]",
     project: "[[Test]]",
     ...overrides
@@ -106,7 +107,8 @@ describe("TaskQuery", () => {
       text: "missing",
       source: new TaskSource({ path: "vault/30-Projects/Test.md", lineNumber: 2 }),
       fields: {},
-      unknownFields: {}
+      unknownFields: {},
+      tags: []
     })
     const invalid = task({ fields: { scheduled: "tomorrow" } })
     const doneMissing = new ParsedTask({
@@ -114,7 +116,8 @@ describe("TaskQuery", () => {
       text: "done missing",
       source: new TaskSource({ path: "vault/30-Projects/Test.md", lineNumber: 3 }),
       fields: {},
-      unknownFields: {}
+      unknownFields: {},
+      tags: []
     })
 
     const problems = validateTasks([missing, invalid, doneMissing])

@@ -16,6 +16,7 @@ const task = (text: string, lineNumber: number, overrides: Partial<ParsedTask> =
     source: source(lineNumber),
     fields: {},
     unknownFields: {},
+    tags: ["#task"],
     area: "[[Personal]]",
     project: "[[Test Project]]",
     ...overrides

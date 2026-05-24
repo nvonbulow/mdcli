@@ -17,11 +17,13 @@ Use this as shared context for repo-local vault workflow skills. It is not the p
 Common commands:
 
 ```bash
+kb --format json check
+kb --format json check --file PATH
+kb --format json check --files 'GLOB'
 kb --format json task today --date YYYY-MM-DD
 kb --format json task due --date YYYY-MM-DD
 kb --format json task week --start YYYY-MM-DD
 kb --format json task open
-kb --format json task check
 ```
 
 Deferred future CLI workflow aids belong in `ROADMAP.md`, not in this skill.
@@ -120,9 +122,10 @@ summary: [[<Summary Note>]]
 
 After material vault edits:
 
-1. Re-run the relevant `kb --format json ...` query when tasks, dates, or task metadata changed.
-2. Use `search` only for targeted confirmation that edited lines contain the expected metadata, daily-log entry, or resource link.
-3. Run `jj status` in `vault/` before yielding when vault content changed.
+1. Run `kb --format json check` after any vault content change. Treat a nonzero exit with well-formed JSON findings as a completed check; inspect findings and fix any errors or newly introduced warnings before yielding.
+2. Re-run the relevant `kb --format json ...` task query when tasks, dates, or task metadata changed.
+3. Use `search` only for targeted confirmation that edited lines contain the expected metadata, daily-log entry, or resource link.
+4. Run `jj status` in `vault/` before yielding when vault content changed.
 
 ## Reporting style
 

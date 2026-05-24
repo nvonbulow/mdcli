@@ -143,7 +143,7 @@ When the source is a URL, article, paper, or other reference material:
 
 After edits:
 
-1. Run `kb --format json task check` if tasks or task metadata changed.
+1. Run `kb --format json check` after any vault content change. Treat a nonzero exit with well-formed JSON findings as a completed check; inspect findings and fix any errors or newly introduced warnings before yielding.
 2. Run targeted `kb --format json task today`, `task due`, `task week`, or `task open` queries when scheduled or due dates changed.
 3. Use targeted `search` to confirm edited task metadata, resource links, or daily-log entries when needed.
 4. Run `jj status` in `vault/` before yielding when vault content changed.

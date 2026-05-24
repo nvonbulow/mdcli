@@ -1,6 +1,6 @@
 import { Schema } from "effect"
 import { DashboardName } from "./DashboardModel"
-import { TaskSource, ValidationProblem } from "./TaskModel"
+import { TaskSource } from "./TaskModel"
 
 export class VaultIoError extends Schema.TaggedErrorClass<VaultIoError>("@kb/vault/VaultIoError")("VaultIoError", {
   operation: Schema.String,
@@ -25,14 +25,6 @@ export class MarkdownParseError extends Schema.TaggedErrorClass<MarkdownParseErr
   }
 ) {}
 
-export class TaskValidationError extends Schema.TaggedErrorClass<TaskValidationError>("@kb/vault/TaskValidationError")(
-  "TaskValidationError",
-  {
-    message: Schema.String,
-    problems: Schema.Array(ValidationProblem)
-  }
-) {}
-
 export class DashboardRenderError extends Schema.TaggedErrorClass<DashboardRenderError>(
   "@kb/vault/DashboardRenderError"
 )("DashboardRenderError", {
@@ -40,5 +32,4 @@ export class DashboardRenderError extends Schema.TaggedErrorClass<DashboardRende
   name: Schema.optionalKey(DashboardName)
 }) {}
 
-export type VaultError = VaultIoError | TaskParseError | TaskValidationError | DashboardRenderError | MarkdownParseError
-export type TaskError = TaskParseError | TaskValidationError
+export type VaultError = VaultIoError | TaskParseError | DashboardRenderError | MarkdownParseError

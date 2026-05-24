@@ -1,11 +1,51 @@
 import { assert, describe, it } from "@effect/vitest"
 import { Chunk, Effect, FileSystem, Layer, Path, Result, Trie } from "effect"
 import { Markdown } from "../src/markdown/Markdown"
+import * as Glob from "../src/Glob"
 import { VaultService } from "../src/VaultService"
+import { fromPath } from "../src/VaultScope"
 
 const testRoot = "/effect-vault-test"
 
 type TestFiles = Record<string, string>
+
+const escapeRegExp = (value: string): string => value.replace(/[.+^${}()|[\]\\]/g, "\\$&")
+
+const globPatternToRegExp = (pattern: string): RegExp => {
+  let source = "^"
+  for (let index = 0; index < pattern.length; index += 1) {
+    const character = pattern[index]
+    if (character === "*" && pattern[index + 1] === "*" && pattern[index + 2] === "/") {
+      source += "(?:.*/)?"
+      index += 2
+    } else if (character === "*" && pattern[index + 1] === "*") {
+      source += ".*"
+      index += 1
+    } else if (character === "*") {
+      source += "[^/]*"
+    } else if (character === "?") {
+      source += "[^/]"
+    } else {
+      source += escapeRegExp(character ?? "")
+    }
+  }
+  return new RegExp(`${source}$`)
+}
+
+const testGlobLayer = (files: TestFiles) =>
+  Layer.succeed(Glob.Glob, {
+    glob: (pattern, options) =>
+      Effect.sync(() => {
+        const patterns = typeof pattern === "string" ? [pattern] : Array.from(pattern)
+        const matchers = patterns.map(globPatternToRegExp)
+        const cwd = typeof options?.cwd === "string" ? options.cwd : testRoot
+        const rootPrefix = `${cwd}/`
+        return Object.keys(files)
+          .filter((filePath) => filePath.startsWith(rootPrefix))
+          .map((filePath) => filePath.slice(rootPrefix.length))
+          .filter((filePath) => matchers.some((matcher) => matcher.test(filePath)))
+      })
+  })
 
 const testFileSystemLayer = (files: TestFiles) =>
   FileSystem.layerNoop({
@@ -23,7 +63,9 @@ const testFileSystemLayer = (files: TestFiles) =>
   })
 
 const vaultLayer = (files: TestFiles) =>
-  VaultService.makeLayer({ root: testRoot }).pipe(Layer.provide(Layer.mergeAll(testFileSystemLayer(files), Path.layer)))
+  VaultService.makeLayer({ root: testRoot }).pipe(
+    Layer.provide(Layer.mergeAll(testFileSystemLayer(files), testGlobLayer(files), Path.layer))
+  )
 
 describe("VaultService", () => {
   it.effect("reads and writes text using paths relative to the configured root", () => {
@@ -51,11 +93,11 @@ describe("VaultService", () => {
 
     return Effect.gen(function* () {
       const vault = yield* VaultService
-      const tree = yield* vault.readMarkdownTree("30-Projects")
+      const tree = yield* vault.readMarkdownTree(fromPath("30-Projects"))
       const entries = Array.from(Trie.entries(tree.files))
       const files = entries.map(([, result]) => Result.getOrThrow(result))
 
-      assert.strictEqual(tree.root, "30-Projects")
+      assert.strictEqual(tree.root, "")
       assert.deepStrictEqual(
         entries.map(([path]) => path),
         ["30-Projects/Personal/Plan.md", "30-Projects/Work/Roadmap.md"]

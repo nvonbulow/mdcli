@@ -24,12 +24,6 @@ export class ParsedTask extends Schema.Class<ParsedTask>("@kb/vault/ParsedTask")
   project: Schema.optionalKey(Schema.String)
 }) {}
 
-export class ValidationProblem extends Schema.Class<ValidationProblem>("@kb/vault/ValidationProblem")({
-  severity: Schema.Literal("error"),
-  message: Schema.String,
-  source: TaskSource
-}) {}
-
 export const TaskViewName = Schema.Literals(["today", "week", "open"])
 export type TaskViewName = typeof TaskViewName.Type
 

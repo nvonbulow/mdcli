@@ -14,6 +14,7 @@ import { parsedTasksFromMarkdownFile } from "./TaskParser"
 import type { ParsedTask } from "./TaskModel"
 import { VaultService } from "./VaultService"
 import type { MarkdownParseError, VaultIoError } from "./VaultErrors"
+import type { VaultScope } from "./VaultScope"
 import { CatalogSearchResult } from "./CatalogModel"
 import type {
   CatalogDiagnostic,
@@ -31,12 +32,12 @@ import type {
 type CatalogServiceError = VaultIoError
 
 export type CatalogServiceShape = {
-  readonly snapshot: (source: string) => Effect.Effect<CatalogSnapshot, CatalogServiceError>
-  readonly listNotes: (source: string) => Effect.Effect<Chunk.Chunk<CatalogNoteRecord>, CatalogServiceError>
-  readonly listTasks: (source: string) => Effect.Effect<Chunk.Chunk<CatalogTaskRecord>, CatalogServiceError>
-  readonly listTags: (source: string) => Effect.Effect<Chunk.Chunk<CatalogTagRecord>, CatalogServiceError>
+  readonly snapshot: (scope: VaultScope) => Effect.Effect<CatalogSnapshot, CatalogServiceError>
+  readonly listNotes: (scope: VaultScope) => Effect.Effect<Chunk.Chunk<CatalogNoteRecord>, CatalogServiceError>
+  readonly listTasks: (scope: VaultScope) => Effect.Effect<Chunk.Chunk<CatalogTaskRecord>, CatalogServiceError>
+  readonly listTags: (scope: VaultScope) => Effect.Effect<Chunk.Chunk<CatalogTagRecord>, CatalogServiceError>
   readonly search: (
-    source: string,
+    scope: VaultScope,
     query: string
   ) => Effect.Effect<Chunk.Chunk<CatalogSearchResult>, CatalogServiceError>
 }
@@ -53,29 +54,29 @@ export class CatalogService extends Context.Service<CatalogService, CatalogServi
 function makeCatalogService() {
   return Effect.gen(function* () {
     const vault = yield* VaultService
-    const snapshot = Effect.fn("CatalogService.snapshot")(function* (source: string) {
-      const tree = yield* vault.readMarkdownTree(source)
+    const snapshot = Effect.fn("CatalogService.snapshot")(function* (scope: VaultScope) {
+      const tree = yield* vault.readMarkdownTree(scope)
       const cataloged = Chunk.map(Chunk.fromIterable(Trie.entries(tree.files)), ([path, result]) =>
         Result.isSuccess(result) ? catalogParsedFile(path, result.success) : catalogParseFailure(path, result.failure)
       )
 
-      return snapshotFromCatalogedFiles(source, cataloged)
+      return snapshotFromCatalogedFiles(scope, cataloged)
     })
 
-    const listNotes = Effect.fn("CatalogService.listNotes")((source: string) =>
-      snapshot(source).pipe(Effect.map((catalog) => catalog.notes))
+    const listNotes = Effect.fn("CatalogService.listNotes")((scope: VaultScope) =>
+      snapshot(scope).pipe(Effect.map((catalog) => catalog.notes))
     )
 
-    const listTasks = Effect.fn("CatalogService.listTasks")((source: string) =>
-      snapshot(source).pipe(Effect.map((catalog) => catalog.tasks))
+    const listTasks = Effect.fn("CatalogService.listTasks")((scope: VaultScope) =>
+      snapshot(scope).pipe(Effect.map((catalog) => catalog.tasks))
     )
 
-    const listTags = Effect.fn("CatalogService.listTags")((source: string) =>
-      snapshot(source).pipe(Effect.map((catalog) => catalog.tags))
+    const listTags = Effect.fn("CatalogService.listTags")((scope: VaultScope) =>
+      snapshot(scope).pipe(Effect.map((catalog) => catalog.tags))
     )
 
-    const search = Effect.fn("CatalogService.search")((source: string, query: string) =>
-      snapshot(source).pipe(Effect.map((catalog) => searchSnapshot(catalog, query)))
+    const search = Effect.fn("CatalogService.search")((scope: VaultScope, query: string) =>
+      snapshot(scope).pipe(Effect.map((catalog) => searchSnapshot(catalog, query)))
     )
 
     return CatalogService.of({
@@ -154,8 +155,8 @@ const catalogParseFailure = (path: string, cause: MarkdownParseError): Cataloged
     })
   }
 }
-const snapshotFromCatalogedFiles = (source: string, files: Chunk.Chunk<CatalogedFile>): CatalogSnapshot => ({
-  source,
+const snapshotFromCatalogedFiles = (scope: VaultScope, files: Chunk.Chunk<CatalogedFile>): CatalogSnapshot => ({
+  scope,
   notes: Chunk.flatMap(files, (file) => (file.note === undefined ? Chunk.empty() : Chunk.of(file.note))),
   frontmatter: Chunk.flatMap(files, (file) => file.frontmatter),
   headings: Chunk.flatMap(files, (file) => file.headings),

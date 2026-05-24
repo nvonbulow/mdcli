@@ -1,9 +1,9 @@
-import { Chunk, Console, Effect } from "effect"
+import { Console, Effect } from "effect"
 import { Command, Flag } from "effect/unstable/cli"
 import { DataviewProgram, DataviewRenderer } from "@kb/dataview"
-import { CalendarService, CatalogService, TaskValidator, type IsoDate } from "@kb/vault"
+import { CalendarService, type IsoDate } from "@kb/vault"
 import { resolveDateInput } from "./DateInput"
-import { taskSourceFlag } from "./OutputFormat"
+import { dataviewSourcesFromFlags, scopeFlags } from "./OutputFormat"
 
 const dateFlag = Flag.string("date").pipe(
   Flag.withDescription("Date as YYYY-MM-DD, today, tomorrow, yesterday, +Nd, or -Nd; defaults to today"),
@@ -16,9 +16,7 @@ const startFlag = Flag.string("start").pipe(
 )
 
 const TaskRoot = Command.make("task").pipe(
-  Command.withSharedFlags({
-    source: taskSourceFlag
-  }),
+  Command.withSharedFlags(scopeFlags),
   Command.withDescription("Compute task views from project Markdown files")
 )
 
@@ -29,7 +27,7 @@ export const TaskCommand = TaskRoot.pipe(
       {},
       Effect.fn(function* () {
         const flags = yield* TaskRoot
-        yield* runDataview(openQuery(flags.source))
+        yield* runDataviewForSources(dataviewSourcesFromFlags(flags), openQuery)
       })
     ).pipe(Command.withDescription("List all open tasks grouped by area/project")),
 
@@ -39,7 +37,7 @@ export const TaskCommand = TaskRoot.pipe(
       Effect.fn(function* ({ date }) {
         const flags = yield* TaskRoot
         const resolvedDate = yield* resolveDateInput(date, "date")
-        yield* runDataview(todayQuery(flags.source, resolvedDate))
+        yield* runDataviewForSources(dataviewSourcesFromFlags(flags), (source) => todayQuery(source, resolvedDate))
       })
     ).pipe(Command.withDescription("List tasks scheduled or due on a date")),
 
@@ -51,7 +49,9 @@ export const TaskCommand = TaskRoot.pipe(
         const resolvedStart = yield* resolveDateInput(start, "start")
         const calendar = yield* CalendarService
         const resolvedEnd = yield* calendar.addDays(resolvedStart, 6)
-        yield* runDataview(weekQuery(flags.source, resolvedStart, resolvedEnd))
+        yield* runDataviewForSources(dataviewSourcesFromFlags(flags), (source) =>
+          weekQuery(source, resolvedStart, resolvedEnd)
+        )
       })
     ).pipe(Command.withDescription("List tasks scheduled or due in a 7-day window")),
 
@@ -61,7 +61,7 @@ export const TaskCommand = TaskRoot.pipe(
       Effect.fn(function* ({ date }) {
         const flags = yield* TaskRoot
         const resolvedDate = yield* resolveDateInput(date, "date")
-        yield* runDataview(dueQuery(flags.source, resolvedDate))
+        yield* runDataviewForSources(dataviewSourcesFromFlags(flags), (source) => dueQuery(source, resolvedDate))
       })
     ).pipe(Command.withDescription("List open tasks due on or before a date")),
 
@@ -70,32 +70,18 @@ export const TaskCommand = TaskRoot.pipe(
       {},
       Effect.fn(function* () {
         const flags = yield* TaskRoot
-        yield* runDataview(repeatQuery(flags.source))
+        yield* runDataviewForSources(dataviewSourcesFromFlags(flags), repeatQuery)
       })
-    ).pipe(Command.withDescription("List repeating tasks and scheduled dates")),
-
-    Command.make(
-      "check",
-      {},
-      Effect.fn(function* () {
-        const flags = yield* TaskRoot
-        const catalog = yield* CatalogService
-        const validator = yield* TaskValidator
-        const taskRecords = yield* catalog.listTasks(flags.source)
-        const tasks = Chunk.toReadonlyArray(Chunk.map(taskRecords, (record) => record.task))
-        const problems = yield* validator.validate(tasks)
-        if (problems.length === 0) {
-          yield* Console.log(`Checked ${tasks.filter((task) => !task.done).length} open tasks: OK`)
-          return
-        }
-        for (const problem of problems) {
-          yield* Console.error(`${problem.source.path}:${problem.source.lineNumber}: ${problem.message}`)
-        }
-        return yield* Effect.fail(new Error(`Task check failed with ${problems.length} problem(s)`))
-      })
-    ).pipe(Command.withDescription("Validate task metadata invariants"))
+    ).pipe(Command.withDescription("List repeating tasks and scheduled dates"))
   ])
 )
+
+const runDataviewForSources = Effect.fn(function* (
+  sources: ReadonlyArray<string>,
+  buildQuery: (source: string) => string
+) {
+  yield* Effect.forEach(sources, (source) => runDataview(buildQuery(source)))
+})
 
 const runDataview = Effect.fn(function* (queryText: string) {
   const program = yield* DataviewProgram

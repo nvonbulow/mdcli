@@ -2,6 +2,7 @@ import { Chunk, Data } from "effect"
 import type { MarkdownFencedBlock, SourceSpan } from "./markdown/MarkdownModel"
 import type { ParsedTask } from "./TaskModel"
 import type { MarkdownParseError } from "./VaultErrors"
+import type { VaultScope } from "./VaultScope"
 
 export type CatalogSourceReference = {
   readonly path: string
@@ -77,7 +78,7 @@ export type CatalogDiagnostic = {
 }
 
 export type CatalogSnapshot = {
-  readonly source: string
+  readonly scope: VaultScope
   readonly notes: Chunk.Chunk<CatalogNoteRecord>
   readonly frontmatter: Chunk.Chunk<CatalogFrontmatterRecord>
   readonly headings: Chunk.Chunk<CatalogHeadingRecord>

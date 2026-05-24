@@ -1,15 +1,30 @@
-import { Cache, Context, Duration, Effect, Exit, FileSystem, Layer, Path, Result, String as Str, Trie } from "effect"
+import {
+  Cache,
+  Chunk,
+  Context,
+  Duration,
+  Effect,
+  Exit,
+  FileSystem,
+  Layer,
+  Path,
+  Result,
+  String as Str,
+  Trie
+} from "effect"
 import type { PlatformError } from "effect/PlatformError"
+import * as Glob from "./Glob"
 import { MarkdownFile, type MarkdownTree } from "./markdown/MarkdownModel"
 import { MarkdownParser } from "./markdown/MarkdownParser"
 import type { MarkdownParseError } from "./VaultErrors"
 import { VaultIoError } from "./VaultErrors"
+import type { VaultScope } from "./VaultScope"
 
-type VaultServiceShape = {
+export type VaultServiceShape = {
   readonly readText: (path: string) => Effect.Effect<string, VaultIoError>
   readonly writeText: (path: string, contents: string) => Effect.Effect<void, VaultIoError>
   readonly readMarkdown: (path: string) => Effect.Effect<MarkdownFile, VaultIoError | MarkdownParseError>
-  readonly readMarkdownTree: (source: string) => Effect.Effect<MarkdownTree, VaultIoError>
+  readonly readMarkdownTree: (scope: VaultScope) => Effect.Effect<MarkdownTree, VaultIoError>
 }
 
 export class VaultService extends Context.Service<VaultService, VaultServiceShape>()("@kb/vault/VaultService") {
@@ -23,6 +38,7 @@ const makeVaultService = (root: string) =>
     const fs = yield* FileSystem.FileSystem
     const pathService = yield* Path.Path
     const parser = yield* MarkdownParser
+    const glob = yield* Glob.Glob
 
     const readText = Effect.fn("VaultService.readText")(function* (path: string) {
       const normalizedPath = normalizePath(path)
@@ -70,26 +86,38 @@ const makeVaultService = (root: string) =>
       return yield* Cache.invalidate(markdownCache, normalizedPath)
     })
 
-    const readMarkdownTree = Effect.fn("VaultService.readMarkdownTree")(function* (source: string) {
-      const normalizedSource = normalizePath(source)
-      const sourceRoot = pathService.join(root, normalizedSource)
-      const entries = yield* mapIoError(
-        "readMarkdownTree",
-        normalizedSource,
-        fs.readDirectory(sourceRoot, { recursive: true })
-      )
-      const markdownFiles = entries.filter((entry) => Str.endsWith(".md")(entry))
+    const readMarkdownTree: VaultServiceShape["readMarkdownTree"] = Effect.fn("VaultService.readMarkdownTree")(
+      function* (scope: VaultScope) {
+        const patterns = Chunk.toReadonlyArray(Chunk.map(scope.patterns, normalizePath))
+        const matches = yield* glob
+          .glob(patterns, {
+            cwd: root,
+            nodir: true,
+            dot: true,
+            absolute: false
+          })
+          .pipe(
+            Effect.mapError(
+              (error) =>
+                new VaultIoError({
+                  operation: "readMarkdownTree",
+                  path: patterns.join(","),
+                  message: globErrorMessage(error.cause)
+                })
+            )
+          )
+        const markdownFiles = sortedUniqueMarkdownPaths(matches)
 
-      const files = yield* Effect.forEach(markdownFiles, (entry) => {
-        const sourcePath = normalizePath(pathService.join(normalizedSource, entry))
-        return Cache.get(markdownCache, sourcePath).pipe(Effect.map((file) => [sourcePath, file] as const))
-      })
+        const files = yield* Effect.forEach(markdownFiles, (path) =>
+          Cache.get(markdownCache, path).pipe(Effect.map((file) => [path, file] as const))
+        )
 
-      return {
-        root: normalizedSource,
-        files: Trie.fromIterable(files)
+        return {
+          root: "",
+          files: Trie.fromIterable(files)
+        }
       }
-    })
+    )
 
     return VaultService.of({
       readText,
@@ -116,3 +144,25 @@ const mapIoError = <A>(
   )
 
 const normalizePath = (path: string): string => Str.replaceAll("\\", "/")(path)
+const sortedUniqueMarkdownPaths = (paths: ReadonlyArray<string>): Array<string> => {
+  const sorted = paths.map(normalizeMatchedPath).filter(Str.endsWith(".md")).sort()
+  const unique: Array<string> = []
+  let previous: string | undefined
+  for (const path of sorted) {
+    if (path !== previous) {
+      unique.push(path)
+      previous = path
+    }
+  }
+  return unique
+}
+
+const normalizeMatchedPath = (path: string): string => {
+  const normalized = normalizePath(path)
+  return normalized.startsWith("./") ? normalized.slice(2) : normalized
+}
+
+const globErrorMessage = (cause: unknown): string =>
+  typeof cause === "object" && cause !== null && "message" in cause && typeof cause.message === "string"
+    ? cause.message
+    : String(cause)

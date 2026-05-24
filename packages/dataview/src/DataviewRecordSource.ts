@@ -1,9 +1,13 @@
 import {
   CatalogService,
+  fromPath,
+  fromPattern,
+  isGlobPattern,
   type MarkdownParseError,
   type ParsedTask,
   type TaskParseError,
-  type VaultIoError
+  type VaultIoError,
+  type VaultScope
 } from "@kb/vault"
 import * as Chunk from "effect/Chunk"
 import * as Context from "effect/Context"
@@ -31,8 +35,8 @@ export class DataviewRecordSource extends Context.Service<DataviewRecordSource, 
       const recordsFor = Effect.fn("@kb/dataview/DataviewRecordSource.recordsFor")(function* (
         query: DataviewTaskQuery
       ) {
-        const source = yield* sourceFromQuery(query)
-        const tasks = yield* catalog.listTasks(source)
+        const scope = yield* scopeFromQuery(query)
+        const tasks = yield* catalog.listTasks(scope)
         return Chunk.toReadonlyArray(Chunk.map(tasks, (record) => taskRecord(record.task)))
       })
       return DataviewRecordSource.of({ recordsFor })
@@ -46,21 +50,21 @@ const taskRecord = (task: ParsedTask): DataviewRecord =>
     fields: taskFields(task)
   })
 
-const sourceFromQuery = (query: DataviewTaskQuery): Effect.Effect<string, DataviewEvaluateError> =>
+const scopeFromQuery = (query: DataviewTaskQuery): Effect.Effect<VaultScope, DataviewEvaluateError> =>
   query.source === undefined
     ? Effect.fail(new DataviewEvaluateError({ message: "Dataview query must specify an explicit source" }))
-    : sourceFromExpression(query.source)
+    : scopeFromExpression(query.source)
 
-const sourceFromExpression = (expression: DataviewExpression): Effect.Effect<string, DataviewEvaluateError> => {
+const scopeFromExpression = (expression: DataviewExpression): Effect.Effect<VaultScope, DataviewEvaluateError> => {
   switch (expression._tag) {
     case "Identifier":
-      return nonEmptySource(expression.name)
+      return scopeFromSource(expression.name)
     case "StringLiteral":
-      return nonEmptySource(expression.value)
+      return scopeFromSource(expression.value)
     case "NumberLiteral":
-      return nonEmptySource(`${expression.value}`)
+      return scopeFromSource(`${expression.value}`)
     case "BooleanLiteral":
-      return nonEmptySource(expression.value ? "true" : "false")
+      return scopeFromSource(expression.value ? "true" : "false")
     default:
       return Effect.fail(
         new DataviewEvaluateError({ message: "Dataview source must be a scalar literal or identifier" })
@@ -88,7 +92,7 @@ const taskFields = (task: ParsedTask): Readonly<Record<string, DataviewValue>> =
   "file.line": task.source.lineNumber
 })
 
-const nonEmptySource = (source: string): Effect.Effect<string, DataviewEvaluateError> =>
+const scopeFromSource = (source: string): Effect.Effect<VaultScope, DataviewEvaluateError> =>
   source.length === 0
     ? Effect.fail(new DataviewEvaluateError({ message: "Dataview query source must not be empty" }))
-    : Effect.succeed(source)
+    : Effect.succeed(isGlobPattern(source) ? fromPattern(source) : fromPath(source))

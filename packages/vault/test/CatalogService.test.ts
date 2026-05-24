@@ -4,6 +4,8 @@ import { CatalogService } from "../src/CatalogService"
 import { MarkdownFile } from "../src/markdown/MarkdownModel"
 import { MarkdownParseError } from "../src/VaultErrors"
 import { VaultService } from "../src/VaultService"
+import * as Glob from "../src/Glob"
+import { fromPath } from "../src/VaultScope"
 const testRoot = "/effect-catalog-test"
 const toArray = <A>(chunk: Chunk.Chunk<A>): ReadonlyArray<A> => Chunk.toReadonlyArray(chunk)
 
@@ -13,6 +15,44 @@ type TestFileSystemState = {
   readonly files: TestFiles
   writes: number
 }
+
+const escapeRegExp = (value: string): string => value.replace(/[.+^${}()|[\]\\]/g, "\\$&")
+
+const globPatternToRegExp = (pattern: string): RegExp => {
+  let source = "^"
+  for (let index = 0; index < pattern.length; index += 1) {
+    const character = pattern[index]
+    if (character === "*" && pattern[index + 1] === "*" && pattern[index + 2] === "/") {
+      source += "(?:.*/)?"
+      index += 2
+    } else if (character === "*" && pattern[index + 1] === "*") {
+      source += ".*"
+      index += 1
+    } else if (character === "*") {
+      source += "[^/]*"
+    } else if (character === "?") {
+      source += "[^/]"
+    } else {
+      source += escapeRegExp(character ?? "")
+    }
+  }
+  return new RegExp(`${source}$`)
+}
+
+const testGlobLayer = (state: TestFileSystemState) =>
+  Layer.succeed(Glob.Glob, {
+    glob: (pattern, options) =>
+      Effect.sync(() => {
+        const patterns = typeof pattern === "string" ? [pattern] : Array.from(pattern)
+        const matchers = patterns.map(globPatternToRegExp)
+        const cwd = typeof options?.cwd === "string" ? options.cwd : testRoot
+        const rootPrefix = `${cwd}/`
+        return Object.keys(state.files)
+          .filter((filePath) => filePath.startsWith(rootPrefix))
+          .map((filePath) => filePath.slice(rootPrefix.length))
+          .filter((filePath) => matchers.some((matcher) => matcher.test(filePath)))
+      })
+  })
 
 const testFileSystemLayer = (state: TestFileSystemState) =>
   FileSystem.layerNoop({
@@ -31,7 +71,9 @@ const testFileSystemLayer = (state: TestFileSystemState) =>
   })
 
 const vaultLayer = (state: TestFileSystemState) =>
-  VaultService.makeLayer({ root: testRoot }).pipe(Layer.provide(Layer.mergeAll(testFileSystemLayer(state), Path.layer)))
+  VaultService.makeLayer({ root: testRoot }).pipe(
+    Layer.provide(Layer.mergeAll(testFileSystemLayer(state), testGlobLayer(state), Path.layer))
+  )
 
 const catalogLayer = (state: TestFileSystemState) => CatalogService.layer.pipe(Layer.provide(vaultLayer(state)))
 
@@ -65,7 +107,7 @@ describe("CatalogService", () => {
 
       return Effect.gen(function* () {
         const catalog = yield* CatalogService
-        const snapshot = yield* catalog.snapshot("30-Projects/Work")
+        const snapshot = yield* catalog.snapshot(fromPath("30-Projects/Work"))
         const notes = toArray(snapshot.notes)
         const diagnostics = toArray(snapshot.diagnostics)
         const frontmatter = toArray(snapshot.frontmatter)
@@ -174,9 +216,9 @@ describe("CatalogService", () => {
       readText: () => Effect.succeed(""),
       writeText: () => Effect.void,
       readMarkdown: () => Effect.succeed(goodFile),
-      readMarkdownTree: (source) =>
+      readMarkdownTree: (_scope) =>
         Effect.succeed({
-          root: source,
+          root: "",
           files: Trie.fromIterable<Result.Result<MarkdownFile, MarkdownParseError>>([
             ["Notes/Bad.md", Result.fail(parseFailure) as Result.Result<MarkdownFile, MarkdownParseError>] as const,
             ["Notes/Good.md", Result.succeed(goodFile) as Result.Result<MarkdownFile, MarkdownParseError>] as const
@@ -187,7 +229,7 @@ describe("CatalogService", () => {
 
     return Effect.gen(function* () {
       const catalog = yield* CatalogService
-      const snapshot = yield* catalog.snapshot("Notes")
+      const snapshot = yield* catalog.snapshot(fromPath("Notes"))
       const notes = toArray(snapshot.notes)
       const headings = toArray(snapshot.headings)
       const tags = toArray(snapshot.tags)
@@ -229,15 +271,15 @@ describe("CatalogService", () => {
 
     return Effect.gen(function* () {
       const catalog = yield* CatalogService
-      const notes = toArray(yield* catalog.listNotes("Notes"))
-      const tasks = toArray(yield* catalog.listTasks("Notes"))
-      const tags = toArray(yield* catalog.listTags("Notes"))
-      const finance = toArray(yield* catalog.search("Notes", "finance"))
-      const quarterly = toArray(yield* catalog.search("Notes", "QUARTERLY"))
-      const runbook = toArray(yield* catalog.search("Notes", "runbook"))
-      const follow = toArray(yield* catalog.search("Notes", "follow"))
-      const meeting = toArray(yield* catalog.search("Notes", "meeting"))
-      const notesPath = toArray(yield* catalog.search("Notes", "Search.md"))
+      const notes = toArray(yield* catalog.listNotes(fromPath("Notes")))
+      const tasks = toArray(yield* catalog.listTasks(fromPath("Notes")))
+      const tags = toArray(yield* catalog.listTags(fromPath("Notes")))
+      const finance = toArray(yield* catalog.search(fromPath("Notes"), "finance"))
+      const quarterly = toArray(yield* catalog.search(fromPath("Notes"), "QUARTERLY"))
+      const runbook = toArray(yield* catalog.search(fromPath("Notes"), "runbook"))
+      const follow = toArray(yield* catalog.search(fromPath("Notes"), "follow"))
+      const meeting = toArray(yield* catalog.search(fromPath("Notes"), "meeting"))
+      const notesPath = toArray(yield* catalog.search(fromPath("Notes"), "Search.md"))
 
       assert.deepStrictEqual(
         notes.map((note) => note.title),

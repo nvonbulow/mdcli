@@ -47,6 +47,8 @@ time:
   '@vitest/utils@4.1.7': 2026-05-20T07:19:15.696Z
   assertion-error@2.0.1: 2023-10-18T18:04:13.507Z
   bail@2.0.2: 2021-11-07T08:39:23.227Z
+  balanced-match@4.0.4: 2026-02-22T11:38:25.951Z
+  brace-expansion@5.0.6: 2026-05-08T05:41:43.205Z
   ccount@2.0.1: 2021-10-28T09:38:13.774Z
   chai@6.2.2: 2025-12-22T21:26:03.989Z
   character-entities@2.0.2: 2022-06-22T14:01:06.906Z
@@ -71,6 +73,7 @@ time:
   find-my-way-ts@0.1.6: 2025-07-08T21:24:50.876Z
   format@0.2.2: 2016-01-27T00:02:03.898Z
   fsevents@2.3.3: 2023-08-21T16:24:22.854Z
+  glob@13.0.6: 2026-02-19T17:26:33.269Z
   ini@7.0.0: 2026-05-08T18:36:26.841Z
   ioredis@5.10.1: 2026-03-19T15:12:27.839Z
   is-plain-obj@4.1.0: 2022-06-15T15:47:13.746Z
@@ -86,6 +89,7 @@ time:
   lodash.defaults@4.2.0: 2016-08-13T17:37:52.434Z
   lodash.isarguments@3.1.0: 2016-08-13T17:40:07.017Z
   longest-streak@3.1.0: 2022-11-15T12:13:29.629Z
+  lru-cache@11.5.0: 2026-05-19T23:13:36.156Z
   magic-string@0.30.21: 2025-10-24T00:59:47.122Z
   markdown-table@3.0.4: 2024-10-22T11:58:39.972Z
   mdast-util-find-and-replace@3.0.2: 2025-01-03T12:27:35.988Z
@@ -130,6 +134,8 @@ time:
   micromark-util-types@2.0.2: 2025-02-27T13:55:27.982Z
   micromark@4.0.2: 2025-02-27T14:04:03.516Z
   mime@4.1.0: 2025-09-12T17:53:01.376Z
+  minimatch@10.2.5: 2026-03-30T18:08:07.247Z
+  minipass@7.1.3: 2026-02-19T00:34:33.886Z
   ms@2.1.3: 2020-12-08T13:54:35.223Z
   msgpackr-extract@3.0.3: 2024-06-09T04:54:02.062Z
   msgpackr@2.0.1: 2026-05-02T17:24:01.192Z
@@ -137,6 +143,7 @@ time:
   nanoid@3.3.12: 2026-04-30T22:04:14.515Z
   node-gyp-build-optional-packages@5.2.2: 2024-06-09T03:33:11.576Z
   obug@2.1.1: 2025-11-22T09:31:55.146Z
+  path-scurry@2.0.2: 2026-02-19T17:20:00.211Z
   pathe@2.0.3: 2025-02-11T19:47:35.862Z
   picocolors@1.1.1: 2024-10-16T18:20:03.921Z
   picomatch@4.0.4: 2026-03-23T20:39:47.960Z
@@ -308,6 +315,9 @@ importers:
       effect:
         specifier: beta
         version: 4.0.0-beta.70
+      glob:
+        specifier: ^13.0.6
+        version: 13.0.6
       remark-frontmatter:
         specifier: ^5.0.0
         version: 5.0.0
@@ -568,6 +578,14 @@ packages:
   bail@2.0.2:
     resolution: {integrity: sha512-0xO6mYd7JB2YesxDKplafRpsiOzPt9V02ddPCLbY1xYGPOX24NTyN50qnUxgCPcSoYMhKpAuBTjQoRZCAkUDRw==}
 
+  balanced-match@4.0.4:
+    resolution: {integrity: sha512-BLrgEcRTwX2o6gGxGOCNyMvGSp35YofuYzw9h1IMTRmKqttAZZVU67bdb9Pr2vUHA8+j3i2tJfjO6C6+4myGTA==}
+    engines: {node: 18 || 20 || >=22}
+
+  brace-expansion@5.0.6:
+    resolution: {integrity: sha512-kLpxurY4Z4r9sgMsyG0Z9uzsBlgiU/EFKhj/h91/8yHu0edo7XuixOIH3VcJ8kkxs6/jPzoI6U9Vj3WqbMQ94g==}
+    engines: {node: 18 || 20 || >=22}
+
   ccount@2.0.1:
     resolution: {integrity: sha512-eyrF0jiFpY+3drT6383f1qhkbGsLSifNAjA61IUjZjmLCWjItY6LB9ft9YhoDgwfmclB2zhu51Lc7+95b8NRAg==}
 
@@ -664,6 +682,10 @@ packages:
     os:
     - darwin
 
+  glob@13.0.6:
+    resolution: {integrity: sha512-Wjlyrolmm8uDpm/ogGyXZXb1Z+Ca2B8NbJwqBVg0axK9GbBeoS7yGV6vjXnYdGm6X53iehEuxxbyiKp8QmN4Vw==}
+    engines: {node: 18 || 20 || >=22}
+
   ini@7.0.0:
     resolution: {integrity: sha512-ifK0CgjALofS5bkrcTy4RaQ9Vx2Knf/eLeIO+NaswQEpH1UblrtTSCIvN71qQDMq0PeQ/SSPojvEJp9vvvfr+w==}
     engines: {node: ^22.22.2 || ^24.15.0 || >=26.0.0}
@@ -755,6 +777,10 @@ packages:
 
   longest-streak@3.1.0:
     resolution: {integrity: sha512-9Ri+o0JYgehTaVBBDoMqIl8GXtbWg711O3srftcHhZ0dqnETqLaoIK0x17fUw9rFSlK/0NlsKe0Ahhyl5pXE2g==}
+
+  lru-cache@11.5.0:
+    resolution: {integrity: sha512-5YgH9UJd7wVb9hIouI2adWpgqrrICkt070Dnj8EUY1+B4B2P9eRLPAkAAo6NICA7CEhOIeBHl46u9zSNpNu7zA==}
+    engines: {node: 20 || >=22}
 
   magic-string@0.30.21:
     resolution: {integrity: sha512-vd2F4YUyEXKGcLHoq+TEyCjxueSeHnFxyyjNp80yg0XV4vUhnDer/lvvlqM/arB5bXQN5K2/3oinyCRyx8T2CQ==}
@@ -890,6 +916,14 @@ packages:
     engines: {node: '>=16'}
     hasBin: true
 
+  minimatch@10.2.5:
+    resolution: {integrity: sha512-MULkVLfKGYDFYejP07QOurDLLQpcjk7Fw+7jXS2R2czRQzR56yHRveU5NDJEOviH+hETZKSkIk5c+T23GjFUMg==}
+    engines: {node: 18 || 20 || >=22}
+
+  minipass@7.1.3:
+    resolution: {integrity: sha512-tEBHqDnIoM/1rXME1zgka9g6Q2lcoCkxHLuc7ODJ5BxbP5d4c2Z5cGgtXAku59200Cx7diuHTOYfSBD8n6mm8A==}
+    engines: {node: '>=16 || 14 >=14.17'}
+
   ms@2.1.3:
     resolution: {integrity: sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==}
 
@@ -914,6 +948,10 @@ packages:
 
   obug@2.1.1:
     resolution: {integrity: sha512-uTqF9MuPraAQ+IsnPf366RG4cP9RtUi7MLO1N3KEc+wb0a6yKpeL0lmk2IB1jY5KHPAlTc6T/JRdC/YqxHNwkQ==}
+
+  path-scurry@2.0.2:
+    resolution: {integrity: sha512-3O/iVVsJAPsOnpwWIeD+d6z/7PmqApyQePUtCndjatj/9I5LylHvt5qluFaBT3I5h3r1ejfR056c+FCv+NnNXg==}
+    engines: {node: 18 || 20 || >=22}
 
   pathe@2.0.3:
     resolution: {integrity: sha512-WUjGcAqP1gQacoQe+OBJsFA7Ld4DyXuUIjZ5cc75cLHvJ7dtNsTugphxIADwspS+AraAUePCKrSVtPLFj/F88w==}
@@ -1288,6 +1326,12 @@ snapshots:
 
   bail@2.0.2: {}
 
+  balanced-match@4.0.4: {}
+
+  brace-expansion@5.0.6:
+    dependencies:
+      balanced-match: 4.0.4
+
   ccount@2.0.1: {}
 
   chai@6.2.2: {}
@@ -1367,6 +1411,12 @@ snapshots:
 
   fsevents@2.3.3: {}
 
+  glob@13.0.6:
+    dependencies:
+      minimatch: 10.2.5
+      minipass: 7.1.3
+      path-scurry: 2.0.2
+
   ini@7.0.0: {}
 
   ioredis@5.10.1:
@@ -1416,6 +1466,8 @@ snapshots:
   lodash.isarguments@3.1.0: {}
 
   longest-streak@3.1.0: {}
+
+  lru-cache@11.5.0: {}
 
   magic-string@0.30.21:
     dependencies:
@@ -1720,6 +1772,12 @@ snapshots:
 
   mime@4.1.0: {}
 
+  minimatch@10.2.5:
+    dependencies:
+      brace-expansion: 5.0.6
+
+  minipass@7.1.3: {}
+
   ms@2.1.3: {}
 
   msgpackr-extract@3.0.3:
@@ -1744,6 +1802,11 @@ snapshots:
       detect-libc: 2.1.2
 
   obug@2.1.1: {}
+
+  path-scurry@2.0.2:
+    dependencies:
+      lru-cache: 11.5.0
+      minipass: 7.1.3
 
   pathe@2.0.3: {}
 

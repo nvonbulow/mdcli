@@ -1,5 +1,13 @@
 import { assert, describe, it } from "@effect/vitest"
-import { CalendarService, CatalogModel, CatalogService, ParsedTask, TaskSource, type IsoDate } from "@kb/vault"
+import {
+  CalendarService,
+  CatalogModel,
+  CatalogService,
+  ParsedTask,
+  TaskSource,
+  type IsoDate,
+  type VaultScope
+} from "@kb/vault"
 import { Chunk, Effect, Layer } from "effect"
 import {
   DataviewEvaluator,
@@ -53,14 +61,19 @@ const catalogTaskRecord = (task: ParsedTask): CatalogModel.CatalogTaskRecord => 
   }
 }
 
+const scopeKey = (scope: VaultScope): string => {
+  const pattern = Chunk.toReadonlyArray(scope.patterns)[0] ?? ""
+  return pattern.endsWith("/**/*.md") ? pattern.slice(0, -"/**/*.md".length) : pattern
+}
+
 const catalogLayer = (tasksBySource: Readonly<Record<string, ReadonlyArray<ParsedTask>>>) =>
   Layer.succeed(
     CatalogService,
     CatalogService.of({
       snapshot: () => Effect.die(new Error("snapshot should not be used by dataview tests")),
       listNotes: () => Effect.die(new Error("listNotes should not be used by dataview tests")),
-      listTasks: (sourceName) =>
-        Effect.succeed(Chunk.fromIterable((tasksBySource[sourceName] ?? []).map(catalogTaskRecord))),
+      listTasks: (scope) =>
+        Effect.succeed(Chunk.fromIterable((tasksBySource[scopeKey(scope)] ?? []).map(catalogTaskRecord))),
       listTags: () => Effect.die(new Error("listTags should not be used by dataview tests")),
       search: () => Effect.die(new Error("search should not be used by dataview tests"))
     })

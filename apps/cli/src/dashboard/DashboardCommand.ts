@@ -1,122 +1,54 @@
-import { Console, Effect, Option } from "effect"
+import { Console, Effect } from "effect"
 import { Argument, Command, Flag } from "effect/unstable/cli"
-import { Renderer, taskTableResult, type OutputFormat } from "@kb/dataview"
-import { resolveDateInput } from "../DateInput"
-import { formatFlag } from "../OutputFormat"
 import {
-  DashboardRenderOptions,
-  readProjectTasks,
-  ReadVaultOptions,
-  openTasks,
-  sortTasksByGroup,
-  todayTasks,
-  weekTasks,
-  type DashboardName,
-  type ParsedTask
-} from "@kb/vault"
+  DataviewEvaluator,
+  DataviewFunctionRegistry,
+  DataviewParser,
+  DataviewProgram,
+  DataviewRecordSource,
+  MarkdownDataviewRenderer,
+  MarkdownFenceParser
+} from "@kb/dataview"
+import { CalendarService, VaultService } from "@kb/vault"
+import { formatFlag, rendererLayerForFormat } from "../OutputFormat"
 
-const dateFlag = Flag.string("date").pipe(
-  Flag.withDescription(
-    "Today dashboard date as YYYY-MM-DD, today, tomorrow, yesterday, +Nd, or -Nd; defaults to today"
-  ),
-  Flag.optional
-)
-
-const startFlag = Flag.string("start").pipe(
-  Flag.withDescription(
-    "Week dashboard start as YYYY-MM-DD, today, tomorrow, yesterday, +Nd, or -Nd; defaults to today"
-  ),
-  Flag.optional
-)
-
-const dashboardName = Argument.choice("dashboard_name", ["today", "week", "open"] as const).pipe(
-  Argument.withDescription("Dashboard to render: today, week, or open")
+const dashboardPath = Argument.string("path").pipe(
+  Argument.withDescription("Markdown dashboard file path relative to the vault root")
 )
 
 const DashboardRoot = Command.make("dashboard").pipe(
   Command.withSharedFlags({
-    vault: Flag.string("vault").pipe(Flag.withDescription("Markdown vault root"), Flag.withDefault("vault"))
+    vault: Flag.string("vault").pipe(Flag.withDescription("Markdown vault root"))
   }),
-  Command.withDescription("Render computed dashboards")
+  Command.withDescription("Render Dataview dashboard documents")
 )
 
 export const DashboardCommand = DashboardRoot.pipe(
   Command.withSubcommands([
     Command.make(
       "render",
-      { name: dashboardName, date: dateFlag, start: startFlag, format: formatFlag },
-      Effect.fn(function* ({ name, date, start, format }) {
+      { path: dashboardPath, format: formatFlag },
+      Effect.fn(function* ({ path, format }) {
         const root = yield* DashboardRoot
-        const tasks = yield* readProjectTasks(new ReadVaultOptions({ root: root.vault }))
-        const options = yield* resolveDashboardOptions(name, date, start)
-        yield* renderDashboardResult(tasks, options, format)
+        const output = yield* Effect.gen(function* () {
+          const vault = yield* VaultService
+          const renderer = yield* MarkdownDataviewRenderer
+          const markdown = yield* vault.readText(path)
+          return yield* renderer.renderDocument(markdown)
+        }).pipe(
+          Effect.provide(MarkdownDataviewRenderer.layerNoDeps),
+          Effect.provide(DataviewProgram.layerNoDeps),
+          Effect.provide(DataviewFunctionRegistry.layerNoDeps),
+          Effect.provide(DataviewRecordSource.layerNoDeps),
+          Effect.provide(DataviewEvaluator.layerNoDeps),
+          Effect.provide(DataviewParser.layerNoDeps),
+          Effect.provide(MarkdownFenceParser.layerNoDeps),
+          Effect.provide(CalendarService.layerLive),
+          Effect.provide(VaultService.makeLayer({ root: root.vault })),
+          Effect.provide(rendererLayerForFormat(format))
+        )
+        yield* Console.log(output)
       })
-    ).pipe(Command.withDescription("Render a dashboard to stdout"))
+    ).pipe(Command.withDescription("Render a markdown dashboard file to stdout"))
   ])
 )
-
-const resolveDashboardOptions = Effect.fn(function* (
-  name: DashboardName,
-  date: Option.Option<string>,
-  start: Option.Option<string>
-) {
-  switch (name) {
-    case "today": {
-      const resolvedDate = yield* resolveDateInput(date, "date")
-      return new DashboardRenderOptions({ name, date: resolvedDate })
-    }
-    case "week": {
-      const resolvedStart = yield* resolveDateInput(start, "start")
-      return new DashboardRenderOptions({ name, start: resolvedStart })
-    }
-    case "open":
-      return new DashboardRenderOptions({ name })
-  }
-})
-const renderDashboardResult = Effect.fn(function* (
-  tasks: ReadonlyArray<ParsedTask>,
-  options: DashboardRenderOptions,
-  format: OutputFormat
-) {
-  const renderer = yield* Renderer
-  const resolved = dashboardTasks(tasks, options)
-  const table = yield* renderer.render(
-    taskTableResult(resolved.tasks, `dashboard ${options.name}`, options.name),
-    format
-  )
-  const output = format === "pretty" ? `# ${resolved.title}\n\n${resolved.summary}\n\n${table}` : table
-  yield* Console.log(output)
-})
-
-const dashboardTasks = (tasks: ReadonlyArray<ParsedTask>, options: DashboardRenderOptions) => {
-  switch (options.name) {
-    case "today": {
-      const date = options.date ?? ""
-      const selected = options.date === undefined ? [] : todayTasks(tasks, options.date)
-      return {
-        title: `Today — ${date}`,
-        summary: `${selected.length} open task${plural(selected.length)} scheduled or due today.`,
-        tasks: selected
-      }
-    }
-    case "week": {
-      const start = options.start ?? ""
-      const selected = options.start === undefined ? [] : weekTasks(tasks, options.start)
-      return {
-        title: `This Week — ${start}`,
-        summary: `${selected.length} open task${plural(selected.length)} scheduled or due in this window.`,
-        tasks: selected
-      }
-    }
-    case "open": {
-      const selected = sortTasksByGroup(openTasks(tasks))
-      return {
-        title: "All Open Tasks",
-        summary: `${selected.length} open task${plural(selected.length)}.`,
-        tasks: selected
-      }
-    }
-  }
-}
-
-const plural = (count: number): string => (count === 1 ? "" : "s")

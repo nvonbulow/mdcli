@@ -1,7 +1,14 @@
-import { Clock, Console, Effect } from "effect"
+import { CalendarService, VaultService } from "@kb/vault"
+import { Console, Effect } from "effect"
 import { Argument, Command, Flag } from "effect/unstable/cli"
-import { DataviewEngine, dataviewFunctions, Renderer, VaultRecords } from "@kb/dataview"
-import { isoDateFromEpochMillis } from "@kb/vault"
+import {
+  DataviewEvaluator,
+  DataviewFunctionRegistry,
+  DataviewParser,
+  DataviewProgram,
+  DataviewRecordSource,
+  DataviewRenderer
+} from "@kb/dataview"
 import { formatFlag } from "../OutputFormat"
 
 const queryText = Argument.string("query").pipe(
@@ -11,7 +18,7 @@ const queryText = Argument.string("query").pipe(
 
 const QueryRoot = Command.make("query").pipe(
   Command.withSharedFlags({
-    vault: Flag.string("vault").pipe(Flag.withDescription("Markdown vault root"), Flag.withDefault("vault"))
+    vault: Flag.string("vault").pipe(Flag.withDescription("Markdown vault root"))
   }),
   Command.withDescription("Run low-level Dataview queries")
 )
@@ -23,18 +30,31 @@ export const QueryCommand = QueryRoot.pipe(
       { query: queryText, format: formatFlag },
       Effect.fn(function* ({ query, format }) {
         const root = yield* QueryRoot
-        const engine = yield* DataviewEngine
-        const vaultRecords = yield* VaultRecords
-        const renderer = yield* Renderer
-        const millis = yield* Clock.currentTimeMillis
-        const context = { functions: dataviewFunctions(isoDateFromEpochMillis(millis)) }
         const text = query.join(" ")
-        const parsed = yield* engine.parse(text)
-        const records = yield* vaultRecords.read({ root: root.vault, source: parsed.source, context })
-        const result = yield* engine.evaluate(text, parsed, records, context)
-        const output = yield* renderer.render(result, format)
+        const output = yield* Effect.gen(function* () {
+          const program = yield* DataviewProgram
+          const renderer = yield* DataviewRenderer
+          const result = yield* program.run(text)
+          return yield* renderer.render(result)
+        }).pipe(
+          Effect.provide(DataviewProgram.layerNoDeps),
+          Effect.provide(DataviewParser.layerNoDeps),
+          Effect.provide(DataviewRecordSource.layerNoDeps),
+          Effect.provide(DataviewEvaluator.layerNoDeps),
+          Effect.provide(DataviewFunctionRegistry.layerNoDeps),
+          Effect.provide(CalendarService.layerLive),
+          Effect.provide(VaultService.makeLayer({ root: root.vault })),
+          Effect.provide(rendererLayer(format))
+        )
         yield* Console.log(output)
       })
     ).pipe(Command.withDescription("Run a Dataview query against a vault"))
   ])
 )
+
+const rendererLayer = (format: "pretty" | "markdown" | "json") =>
+  format === "markdown"
+    ? DataviewRenderer.layerMarkdown
+    : format === "json"
+      ? DataviewRenderer.layerJson
+      : DataviewRenderer.layerPretty

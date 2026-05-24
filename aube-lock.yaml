@@ -295,9 +295,27 @@ importers:
 
   packages/vault:
     dependencies:
+      '@kb/remark-obsidian':
+        specifier: workspace:*
+        version: 0.1.0
+      '@types/mdast':
+        specifier: ^4.0.4
+        version: 4.0.4
       effect:
         specifier: beta
         version: 4.0.0-beta.70
+      remark-frontmatter:
+        specifier: ^5.0.0
+        version: 5.0.0
+      remark-gfm:
+        specifier: ^4.0.1
+        version: 4.0.1
+      remark-parse:
+        specifier: ^11.0.0
+        version: 11.0.0
+      unified:
+        specifier: ^11.0.5
+        version: 11.0.5
       vite:
         specifier: ^6.0.0 || ^7.0.0 || ^8.0.0
         version: 8.0.14(@types/node@24.12.4)(esbuild@0.28.0)(tsx@4.22.3)(yaml@2.9.0)

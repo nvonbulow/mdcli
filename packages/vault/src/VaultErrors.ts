@@ -17,6 +17,14 @@ export class TaskParseError extends Schema.TaggedErrorClass<TaskParseError>("@kb
   }
 ) {}
 
+export class MarkdownParseError extends Schema.TaggedErrorClass<MarkdownParseError>("@kb/vault/MarkdownParseError")(
+  "MarkdownParseError",
+  {
+    message: Schema.String,
+    input: Schema.optionalKey(Schema.String)
+  }
+) {}
+
 export class TaskValidationError extends Schema.TaggedErrorClass<TaskValidationError>("@kb/vault/TaskValidationError")(
   "TaskValidationError",
   {
@@ -32,5 +40,5 @@ export class DashboardRenderError extends Schema.TaggedErrorClass<DashboardRende
   name: Schema.optionalKey(DashboardName)
 }) {}
 
-export type VaultError = VaultIoError | TaskParseError | TaskValidationError | DashboardRenderError
+export type VaultError = VaultIoError | TaskParseError | TaskValidationError | DashboardRenderError | MarkdownParseError
 export type TaskError = TaskParseError | TaskValidationError

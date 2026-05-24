@@ -16,6 +16,9 @@
 - Keep hardcoded environment defaults out of app/package code; pass policy and defaults explicitly from CLI/services.
 - Keep app and package code Effect-based TypeScript only.
 - Do not introduce `async`, `await`, `try/catch`, `throw`, `Date.now`, `new Date`, or TypeScript `interface` in app/package code.
+- Wrap external libraries behind thin Effect services at the async boundary; Promises, `Effect.promise`, `Effect.tryPromise`, and sibling async constructors must not leak outside wrapper code.
+- Give async classes or interfaces from external libraries Effectful facades before package/app code depends on them.
+- Avoid `Effect.sync` unless a block absolutely must run synchronously; when construction is pure, prefer pure Layer construction such as `Layer.succeed`.
 - Prefer Jujutsu (`jj`) for version-control operations and keep logical work in atomic changesets.
 - Treat `./vault` as a separate nested Jujutsu repository for vault content. Do not add vault Markdown/content to the root code repository; run vault version-control commands from `vault/` or with `jj -R vault`.
 - `aube --filter @kb/cli run ...` executes scripts from `apps/cli`, so `--vault ./vault` resolves to `apps/cli/vault`; use `--vault ../../vault` for filtered package smoke checks, or run the CLI from the workspace root when verifying the default `./vault`.

@@ -6,8 +6,9 @@ These are intentionally deferred. Do not implement them as part of the current v
 
 ## Prioritized implementation plan
 
-- [ ] P0: Build vault catalog/search service in `packages/vault`
-  - Extract notes, top-level headings, frontmatter, wikilinks, tags, tasks, inline fields, folders, and source paths.
+- [ ] P0: Finish vault catalog/search foundation in `packages/vault`
+  - Expose catalog and Markdown parser/model APIs through package services, including the catalog service and remark-backed Markdown plugin milestone.
+  - Extract notes, top-level headings, frontmatter, wikilinks, tags, tasks, inline fields, folders, source paths, and fenced blocks.
   - Keep this in package services so CLI commands stay thin.
 - [ ] P0: Add baseline read-only `kb check`
   - Start with broken wikilinks, ambiguous wikilinks from top-level headings, duplicate top-level headings, title/path/frontmatter drift, archive heading uniqueness, and stranded `vault/dump.md` content.
@@ -15,6 +16,8 @@ These are intentionally deferred. Do not implement them as part of the current v
   - Resolve source notes uniquely, update path/title/references, preserve aliases where possible, and support dry-run or preview before applying.
 - [ ] P1: Add `kb task similar <text>`
   - Use deterministic token overlap to prevent duplicate tasks during ingestion.
+- [ ] P1: Add richer fearless metadata edits through the remark plugin
+  - Use Markdown AST-aware rewrites for frontmatter, headings, wikilinks, inline fields, and task metadata when deterministic mutations become safe.
 - [ ] P1: Add project and area discovery commands
   - Implement `kb project list`, `kb project search <query>`, and `kb area list`.
 - [ ] P1: Add `kb tag list`

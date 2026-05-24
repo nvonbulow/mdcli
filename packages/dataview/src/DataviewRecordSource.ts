@@ -1,4 +1,10 @@
-import { VaultService, type ParsedTask, type TaskParseError, type VaultIoError } from "@kb/vault"
+import {
+  VaultService,
+  type MarkdownParseError,
+  type ParsedTask,
+  type TaskParseError,
+  type VaultIoError
+} from "@kb/vault"
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
@@ -8,7 +14,10 @@ import { DataviewRecord, type DataviewValue } from "./DataviewResult"
 export type DataviewRecordSourceService = {
   readonly recordsFor: (
     query: DataviewTaskQuery
-  ) => Effect.Effect<ReadonlyArray<DataviewRecord>, VaultIoError | TaskParseError | DataviewEvaluateError>
+  ) => Effect.Effect<
+    ReadonlyArray<DataviewRecord>,
+    VaultIoError | TaskParseError | MarkdownParseError | DataviewEvaluateError
+  >
 }
 
 export class DataviewRecordSource extends Context.Service<DataviewRecordSource, DataviewRecordSourceService>()(

@@ -1,24 +1,15 @@
-import { Array as Arr, Context, Effect, FileSystem, Layer, Path, String as Str } from "effect"
+import { Cache, Context, Duration, Effect, Exit, FileSystem, Layer, Path, String as Str, Trie } from "effect"
 import type { PlatformError } from "effect/PlatformError"
-import { Markdown } from "./markdown/Markdown"
+import { MarkdownFile, type MarkdownTree } from "./markdown/MarkdownModel"
 import { MarkdownParser } from "./markdown/MarkdownParser"
-import type { ParsedTask } from "./TaskModel"
-import { parsedTasksFromMarkdown } from "./TaskMarkdownParser"
-import type { MarkdownParseError, TaskParseError } from "./VaultErrors"
+import type { MarkdownParseError } from "./VaultErrors"
 import { VaultIoError } from "./VaultErrors"
-
-export type VaultMarkdownFile = {
-  readonly path: string
-  readonly contents: string
-}
 
 type VaultServiceShape = {
   readonly readText: (path: string) => Effect.Effect<string, VaultIoError>
   readonly writeText: (path: string, contents: string) => Effect.Effect<void, VaultIoError>
-  readonly readMarkdownTree: (source: string) => Effect.Effect<ReadonlyArray<VaultMarkdownFile>, VaultIoError>
-  readonly readTasks: (
-    source: string
-  ) => Effect.Effect<ReadonlyArray<ParsedTask>, VaultIoError | TaskParseError | MarkdownParseError>
+  readonly readMarkdown: (path: string) => Effect.Effect<MarkdownFile, VaultIoError | MarkdownParseError>
+  readonly readMarkdownTree: (source: string) => Effect.Effect<MarkdownTree, VaultIoError | MarkdownParseError>
 }
 
 export class VaultService extends Context.Service<VaultService, VaultServiceShape>()("@kb/vault/VaultService") {
@@ -34,45 +25,66 @@ const makeVaultService = (root: string) =>
     const parser = yield* MarkdownParser
 
     const readText = Effect.fn("VaultService.readText")(function* (path: string) {
-      const fullPath = pathService.join(root, path)
-      return yield* mapIoError("readText", path, fs.readFileString(fullPath))
+      const normalizedPath = normalizePath(path)
+      const fullPath = pathService.join(root, normalizedPath)
+      return yield* mapIoError("readText", normalizedPath, fs.readFileString(fullPath))
+    })
+
+    const markdownCache = yield* Cache.makeWith<string, MarkdownFile, VaultIoError | MarkdownParseError>(
+      (path) =>
+        Effect.gen(function* () {
+          const contents = yield* readText(path)
+          const parsed = yield* parser.parse(contents)
+          return new MarkdownFile({
+            path,
+            contents: parsed.contents,
+            mdast: parsed.mdast
+          })
+        }),
+      {
+        capacity: Number.MAX_SAFE_INTEGER,
+        timeToLive: (exit) => (Exit.isSuccess(exit) ? Duration.infinity : Duration.zero)
+      }
+    )
+
+    const readMarkdown = Effect.fn("VaultService.readMarkdown")(function* (path: string) {
+      const normalizedPath = normalizePath(path)
+      return yield* Cache.get(markdownCache, normalizedPath)
     })
 
     const writeText = Effect.fn("VaultService.writeText")(function* (path: string, contents: string) {
-      const fullPath = pathService.join(root, path)
-      return yield* mapIoError("writeText", path, fs.writeFileString(fullPath, contents))
+      const normalizedPath = normalizePath(path)
+      const fullPath = pathService.join(root, normalizedPath)
+      yield* mapIoError("writeText", normalizedPath, fs.writeFileString(fullPath, contents))
+      return yield* Cache.invalidate(markdownCache, normalizedPath)
     })
 
     const readMarkdownTree = Effect.fn("VaultService.readMarkdownTree")(function* (source: string) {
-      const sourceRoot = pathService.join(root, source)
-      const entries = yield* mapIoError("readMarkdownTree", source, fs.readDirectory(sourceRoot, { recursive: true }))
+      const normalizedSource = normalizePath(source)
+      const sourceRoot = pathService.join(root, normalizedSource)
+      const entries = yield* mapIoError(
+        "readMarkdownTree",
+        normalizedSource,
+        fs.readDirectory(sourceRoot, { recursive: true })
+      )
       const markdownFiles = entries.filter((entry) => Str.endsWith(".md")(entry))
 
-      return yield* Effect.forEach(markdownFiles, (entry) => {
-        const fullPath = pathService.join(sourceRoot, entry)
-        const sourcePath = normalizePath(pathService.join(source, entry))
-        return mapIoError("readMarkdownTree", sourcePath, fs.readFileString(fullPath)).pipe(
-          Effect.map((contents): VaultMarkdownFile => ({ path: sourcePath, contents }))
-        )
+      const files = yield* Effect.forEach(markdownFiles, (entry) => {
+        const sourcePath = normalizePath(pathService.join(normalizedSource, entry))
+        return readMarkdown(sourcePath).pipe(Effect.map((file) => [sourcePath, file] as const))
       })
-    })
 
-    const readTasks = Effect.fn("VaultService.readTasks")(function* (source: string) {
-      const markdownFiles = yield* readMarkdownTree(source)
-      const parsed = yield* Effect.forEach(markdownFiles, (file) =>
-        Effect.gen(function* () {
-          const markdownFile = yield* parser.parse(file.contents)
-          return parsedTasksFromMarkdown(Markdown.getTasks(markdownFile), file.contents, file.path)
-        })
-      )
-      return Arr.flatten(parsed)
+      return {
+        root: normalizedSource,
+        files: Trie.fromIterable(files)
+      }
     })
 
     return VaultService.of({
       readText,
       writeText,
-      readMarkdownTree,
-      readTasks
+      readMarkdown,
+      readMarkdownTree
     })
   })
 

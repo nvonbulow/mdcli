@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest"
 import type { Root } from "mdast"
-import { Effect } from "effect"
+import { Chunk, Effect } from "effect"
 import { Markdown } from "../src/markdown/Markdown"
 import { MarkdownParser } from "../src/markdown/MarkdownParser"
 
@@ -55,7 +55,8 @@ describe("MarkdownParser", () => {
   it.effect("extracts YAML frontmatter from the AST", () =>
     Effect.gen(function* () {
       const file = yield* Markdown.parse(markdown)
-      const frontmatter = Markdown.getFrontmatter(file)
+
+      const frontmatter = Chunk.toReadonlyArray(Markdown.getFrontmatter(file))
 
       assert.strictEqual(frontmatter.length, 1)
       assert.strictEqual(frontmatter[0]?.language, "yaml")
@@ -68,13 +69,13 @@ describe("MarkdownParser", () => {
   it.effect("derives headings, wikilinks, tags, list items, tasks, inline fields, and fenced blocks", () =>
     Effect.gen(function* () {
       const file = yield* Markdown.parse(markdown)
-      const headings = Markdown.getHeadings(file)
-      const wikilinks = Markdown.getWikilinks(file)
-      const tags = Markdown.getTags(file)
-      const listItems = Markdown.getListItems(file)
-      const tasks = Markdown.getTasks(file)
-      const fields = Markdown.getInlineFields(file)
-      const blocks = Markdown.getFencedBlocks(file)
+      const headings = Chunk.toReadonlyArray(Markdown.getHeadings(file))
+      const wikilinks = Chunk.toReadonlyArray(Markdown.getWikilinks(file))
+      const tags = Chunk.toReadonlyArray(Markdown.getTags(file))
+      const listItems = Chunk.toReadonlyArray(Markdown.getListItems(file))
+      const tasks = Chunk.toReadonlyArray(Markdown.getTasks(file))
+      const fields = Chunk.toReadonlyArray(Markdown.getInlineFields(file))
+      const blocks = Chunk.toReadonlyArray(Markdown.getFencedBlocks(file))
 
       assert.strictEqual(headings.length, 1)
       assert.strictEqual(headings[0]?.depth, 1)
@@ -100,17 +101,21 @@ describe("MarkdownParser", () => {
       assert.strictEqual(listItems[2]?.text, "Plain list item #plain")
 
       assert.strictEqual(tasks.length, 2)
+      const firstTaskFields = Chunk.toReadonlyArray(tasks[0]!.fields)
+      const firstTaskTags = Chunk.toReadonlyArray(tasks[0]!.tags)
+      const secondTaskFields = Chunk.toReadonlyArray(tasks[1]!.fields)
+      const secondTaskTags = Chunk.toReadonlyArray(tasks[1]!.tags)
       assert.strictEqual(tasks[0]?.done, false)
-      assert.strictEqual(tasks[0]?.fields[0]?.key, "due")
-      assert.strictEqual(tasks[0]?.fields[0]?.value, "2026-05-24")
+      assert.strictEqual(firstTaskFields[0]?.key, "due")
+      assert.strictEqual(firstTaskFields[0]?.value, "2026-05-24")
       assert.deepStrictEqual(
-        tasks[0]?.tags.map((tag) => tag.value),
+        firstTaskTags.map((tag) => tag.value),
         ["#task"]
       )
       assert.strictEqual(tasks[1]?.done, true)
-      assert.strictEqual(tasks[1]?.fields[0]?.key, "completed")
+      assert.strictEqual(secondTaskFields[0]?.key, "completed")
       assert.deepStrictEqual(
-        tasks[1]?.tags.map((tag) => tag.value),
+        secondTaskTags.map((tag) => tag.value),
         ["#done"]
       )
 

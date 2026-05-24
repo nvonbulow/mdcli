@@ -4,6 +4,10 @@
 - Keep meaningful `packages/vault` and `packages/dataview` behavior on `Context.Service` classes and provide it through layers.
 - Do not add exported naked behavior functions or raw helper APIs that bypass services; model/schema constants and data classes are acceptable.
 - Put vault configuration in `VaultService.makeLayer({ root })`; do not invent hidden default root/source paths.
+- `VaultService` owns Markdown file IO, parsed `MarkdownFile` caching, `readMarkdown`, and parsed `readMarkdownTree`; semantic projections such as task listing belong in `CatalogService`.
+- Markdown/catalog public collection APIs use `Chunk.Chunk`; convert to arrays only at CLI, test, or third-party boundaries.
+- Trusted markdown/catalog projection models should use `Data.Class` / `Data.TaggedEnum`; keep Schema for external validation/decoding boundaries and `ParsedTask`.
+- `TaskParser` exposes pure parsed-task extraction over `MarkdownFile`; do not reintroduce `TaskMarkdownParser` or `InlineFieldParser` services.
 - Route Dataview execution through `DataviewProgram`, record sourcing through `DataviewRecordSource` backed by `VaultService`, and keep parser/evaluator internals dynamic without field allowlists or command-specific semantics.
 - Put output format selection in `DataviewRenderer` implementation layers, not config services or renderer method parameters.
 - Keep CLI commands thin: read typed flags/args, choose/provide layers, delegate to services, print.

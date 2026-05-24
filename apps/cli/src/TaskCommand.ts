@@ -1,7 +1,7 @@
-import { Console, Effect } from "effect"
+import { Chunk, Console, Effect } from "effect"
 import { Command, Flag } from "effect/unstable/cli"
 import { DataviewProgram, DataviewRenderer } from "@kb/dataview"
-import { CalendarService, TaskValidator, VaultService, type IsoDate } from "@kb/vault"
+import { CalendarService, CatalogService, TaskValidator, type IsoDate } from "@kb/vault"
 import { resolveDateInput } from "./DateInput"
 import { taskSourceFlag } from "./OutputFormat"
 
@@ -79,9 +79,10 @@ export const TaskCommand = TaskRoot.pipe(
       {},
       Effect.fn(function* () {
         const flags = yield* TaskRoot
-        const vault = yield* VaultService
+        const catalog = yield* CatalogService
         const validator = yield* TaskValidator
-        const tasks = yield* vault.readTasks(flags.source)
+        const taskRecords = yield* catalog.listTasks(flags.source)
+        const tasks = Chunk.toReadonlyArray(Chunk.map(taskRecords, (record) => record.task))
         const problems = yield* validator.validate(tasks)
         if (problems.length === 0) {
           yield* Console.log(`Checked ${tasks.filter((task) => !task.done).length} open tasks: OK`)

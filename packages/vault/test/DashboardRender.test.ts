@@ -1,5 +1,6 @@
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, FileSystem, Layer, Path } from "effect"
+import { Chunk, Effect, FileSystem, Layer, Path, Trie } from "effect"
+import { Markdown } from "../src/markdown/Markdown"
 import { VaultService } from "../src/VaultService"
 
 const testRoot = "/effect-vault-test"
@@ -43,52 +44,64 @@ describe("VaultService", () => {
 
   it.effect("reads markdown trees with relative source paths", () => {
     const files: TestFiles = {
-      [`${testRoot}/30-Projects/Personal/Plan.md`]: "# Plan",
+      [`${testRoot}/30-Projects/Work/Roadmap.md`]: "# Roadmap",
       [`${testRoot}/30-Projects/Personal/Notes.txt`]: "not markdown",
-      [`${testRoot}/30-Projects/Work/Roadmap.md`]: "# Roadmap"
+      [`${testRoot}/30-Projects/Personal/Plan.md`]: "# Plan"
     }
 
     return Effect.gen(function* () {
       const vault = yield* VaultService
-      const markdownFiles = yield* vault.readMarkdownTree("30-Projects")
+      const tree = yield* vault.readMarkdownTree("30-Projects")
+      const entries = Array.from(Trie.entries(tree.files))
 
+      assert.strictEqual(tree.root, "30-Projects")
       assert.deepStrictEqual(
-        markdownFiles.map((file) => file.path),
+        entries.map(([path]) => path),
         ["30-Projects/Personal/Plan.md", "30-Projects/Work/Roadmap.md"]
       )
       assert.deepStrictEqual(
-        markdownFiles.map((file) => file.contents),
+        entries.map(([, file]) => file.path),
+        ["30-Projects/Personal/Plan.md", "30-Projects/Work/Roadmap.md"]
+      )
+      assert.deepStrictEqual(
+        entries.map(([, file]) => file.contents),
         ["# Plan", "# Roadmap"]
       )
     }).pipe(Effect.provide(vaultLayer(files)))
   })
 
-  it.effect("reads tasks from markdown under a relative source tree", () => {
+  it.effect("invalidates parsed markdown cache after writing text", () => {
     const files: TestFiles = {
-      [`${testRoot}/30-Projects/Personal/Plan.md`]: [
-        "- [ ] Plan groceries #task [scheduled:: 2026-05-23] [area:: [[Personal]]] [project:: [[Meal Planning]]]",
-        "- [ ] Plain checkbox"
-      ].join("\n"),
-      [`${testRoot}/30-Projects/Work/Roadmap.md`]:
-        "- [x] Ship migration #task [completed:: 2026-05-24] [area:: [[Work]]] [project:: [[Vault]]]",
-      [`${testRoot}/30-Projects/Work/Notes.txt`]: "- [ ] Not markdown #task"
+      [`${testRoot}/Inbox.md`]: "# Inbox\n- [ ] Old task #task"
     }
 
     return Effect.gen(function* () {
       const vault = yield* VaultService
-      const tasks = yield* vault.readTasks("30-Projects")
+      const first = yield* vault.readMarkdown("Inbox.md")
 
+      assert.strictEqual(first.path, "Inbox.md")
+      assert.strictEqual(first.contents, "# Inbox\n- [ ] Old task #task")
       assert.deepStrictEqual(
-        tasks.map((task) => task.text),
-        ["Plan groceries", "Ship migration"]
+        Chunk.toReadonlyArray(Markdown.getTasks(first)).map((task) => task.text),
+        ["Old task #task"]
       )
       assert.deepStrictEqual(
-        tasks.map((task) => task.source.path),
-        ["30-Projects/Personal/Plan.md", "30-Projects/Work/Roadmap.md"]
+        Chunk.toReadonlyArray(Markdown.getTasks(first)).map((task) => task.done),
+        [false]
+      )
+
+      yield* vault.writeText("Inbox.md", "# Inbox\n- [x] New task #task")
+      const second = yield* vault.readMarkdown("Inbox.md")
+
+      assert.strictEqual(second.path, "Inbox.md")
+      assert.strictEqual(second.contents, "# Inbox\n- [x] New task #task")
+      assert.deepStrictEqual(
+        Chunk.toReadonlyArray(Markdown.getTasks(second)).map((task) => task.text),
+        ["New task #task"]
       )
       assert.deepStrictEqual(
-        tasks.map((task) => task.source.lineNumber),
-        [1, 1]
+        Chunk.toReadonlyArray(Markdown.getTasks(second)).map((task) => task.done),
+        [true]
       )
     }).pipe(Effect.provide(vaultLayer(files)))
   })

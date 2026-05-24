@@ -1,38 +1,12 @@
 import { stripInlineFields } from "@kb/remark-obsidian"
 import { String as Str } from "effect"
-import * as Context from "effect/Context"
-import * as Effect from "effect/Effect"
-import * as Layer from "effect/Layer"
+import * as Chunk from "effect/Chunk"
 import { Markdown } from "./markdown/Markdown"
-import { MarkdownParser } from "./markdown/MarkdownParser"
-import type { MarkdownInlineField, MarkdownTask } from "./markdown/MarkdownModel"
+import type { MarkdownFile, MarkdownInlineField, MarkdownTask } from "./markdown/MarkdownModel"
 import { ParsedTask, TaskSource, type IsoDate } from "./TaskModel"
-import type { MarkdownParseError, TaskParseError } from "./VaultErrors"
 
-export type TaskMarkdownParserService = {
-  readonly parseFile: (
-    markdown: string,
-    sourcePath: string
-  ) => Effect.Effect<ReadonlyArray<ParsedTask>, TaskParseError | MarkdownParseError>
-}
-
-export class TaskMarkdownParser extends Context.Service<TaskMarkdownParser, TaskMarkdownParserService>()(
-  "@kb/vault/TaskMarkdownParser"
-) {
-  static readonly layerNoDeps: Layer.Layer<TaskMarkdownParser, never, MarkdownParser> = Layer.effect(
-    this,
-    Effect.gen(function* () {
-      const parser = yield* MarkdownParser
-      return TaskMarkdownParser.of({
-        parseFile: Effect.fn("TaskMarkdownParser.parseFile")(function* (markdown: string, sourcePath: string) {
-          const markdownFile = yield* parser.parse(markdown)
-          return parsedTasksFromMarkdown(Markdown.getTasks(markdownFile), markdown, sourcePath)
-        })
-      })
-    })
-  )
-  static readonly layer: Layer.Layer<TaskMarkdownParser> = Layer.provide(this.layerNoDeps, MarkdownParser.layer)
-}
+export const parsedTasksFromMarkdownFile = (file: MarkdownFile): Chunk.Chunk<ParsedTask> =>
+  parsedTasksFromMarkdownTasks(Markdown.getTasks(file), file.contents, markdownFilePath(file))
 
 const taskTag = "#task"
 const taskTextTagPattern = /#[A-Za-z0-9/_-]+\b/g
@@ -40,20 +14,27 @@ const taskBodyPattern = /^\s*[-*+]\s+\[[ xX]\]\s*/
 const whitespacePattern = /\s{2,}/g
 const knownFields = new Set(["scheduled", "due", "completed", "depends", "repeat", "area", "project"])
 
-export const parsedTasksFromMarkdown = (
-  tasks: ReadonlyArray<MarkdownTask>,
+const parsedTasksFromMarkdownTasks = (
+  tasks: Iterable<MarkdownTask>,
   markdown: string,
   sourcePath: string
-): ReadonlyArray<ParsedTask> => {
-  const parsed: Array<ParsedTask> = []
+): Chunk.Chunk<ParsedTask> => {
+  let parsed = Chunk.empty<ParsedTask>()
   for (const task of tasks) {
     const tags = taskTags(task, markdown)
     if (!tags.includes(taskTag)) {
       continue
     }
-    parsed.push(parsedTaskFromMarkdown(task, markdown, sourcePath, tags))
+    parsed = Chunk.append(parsed, parsedTaskFromMarkdown(task, markdown, sourcePath, tags))
   }
   return parsed
+}
+
+const markdownFilePath = (file: MarkdownFile): string => {
+  if ("path" in file && typeof file.path === "string") {
+    return file.path
+  }
+  return ""
 }
 
 const taskTags = (task: MarkdownTask, markdown: string): ReadonlyArray<string> => {
@@ -101,7 +82,7 @@ const parsedTaskFromMarkdown = (
 }
 
 const taskFields = (
-  inlineFields: ReadonlyArray<MarkdownInlineField>,
+  inlineFields: Iterable<MarkdownInlineField>,
   lineRange: { readonly start: number; readonly end: number } | undefined
 ): Readonly<Record<string, string>> => {
   const fields: Record<string, string> = {}

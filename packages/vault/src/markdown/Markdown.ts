@@ -1,4 +1,5 @@
 import type { Code, Heading, Root, Yaml } from "mdast"
+import { Chunk } from "effect"
 import * as Effect from "effect/Effect"
 import {
   MarkdownFencedBlock,
@@ -20,14 +21,19 @@ export const Markdown = {
       const parser = yield* MarkdownParser
       return yield* parser.parse(markdown)
     }),
-  getFrontmatter: (file: MarkdownFile): ReadonlyArray<RawFrontmatter> => collectFrontmatter(rootOf(file)),
-  getHeadings: (file: MarkdownFile): ReadonlyArray<MarkdownHeading> => collectHeadings(rootOf(file)),
-  getWikilinks: (file: MarkdownFile): ReadonlyArray<MarkdownWikilink> => collectWikilinks(rootOf(file)),
-  getListItems: (file: MarkdownFile): ReadonlyArray<MarkdownListItem> => collectListItems(rootOf(file)),
-  getTasks: (file: MarkdownFile): ReadonlyArray<MarkdownTask> => collectTasks(rootOf(file)),
-  getTags: (file: MarkdownFile): ReadonlyArray<MarkdownTag> => collectTags(rootOf(file)),
-  getInlineFields: (file: MarkdownFile): ReadonlyArray<MarkdownInlineField> => collectInlineFields(rootOf(file)),
-  getFencedBlocks: (file: MarkdownFile): ReadonlyArray<MarkdownFencedBlock> => collectFencedBlocks(rootOf(file))
+  getFrontmatter: (file: MarkdownFile): Chunk.Chunk<RawFrontmatter> =>
+    Chunk.fromIterable(collectFrontmatter(rootOf(file))),
+  getHeadings: (file: MarkdownFile): Chunk.Chunk<MarkdownHeading> => Chunk.fromIterable(collectHeadings(rootOf(file))),
+  getWikilinks: (file: MarkdownFile): Chunk.Chunk<MarkdownWikilink> =>
+    Chunk.fromIterable(collectWikilinks(rootOf(file))),
+  getListItems: (file: MarkdownFile): Chunk.Chunk<MarkdownListItem> =>
+    Chunk.fromIterable(collectListItems(rootOf(file))),
+  getTasks: (file: MarkdownFile): Chunk.Chunk<MarkdownTask> => Chunk.fromIterable(collectTasks(rootOf(file))),
+  getTags: (file: MarkdownFile): Chunk.Chunk<MarkdownTag> => Chunk.fromIterable(collectTags(rootOf(file))),
+  getInlineFields: (file: MarkdownFile): Chunk.Chunk<MarkdownInlineField> =>
+    Chunk.fromIterable(collectInlineFields(rootOf(file))),
+  getFencedBlocks: (file: MarkdownFile): Chunk.Chunk<MarkdownFencedBlock> =>
+    Chunk.fromIterable(collectFencedBlocks(rootOf(file)))
 } as const
 
 type MarkdownNode = {
@@ -164,8 +170,8 @@ const collectTasks = (root: Root & MarkdownNode): ReadonlyArray<MarkdownTask> =>
           new MarkdownTask({
             done: item.checked,
             text: listItemText(item),
-            fields: collectInlineFieldsFromNode(item),
-            tags: collectTagsFromNode(item),
+            fields: Chunk.fromIterable(collectInlineFieldsFromNode(item)),
+            tags: Chunk.fromIterable(collectTagsFromNode(item)),
             ...optionalSpan(nodeSpan(item))
           })
         )

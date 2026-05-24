@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest"
-import { CalendarService, ParsedTask, TaskSource, VaultService, type IsoDate } from "@kb/vault"
-import { Effect, Layer } from "effect"
+import { CalendarService, CatalogModel, CatalogService, ParsedTask, TaskSource, type IsoDate } from "@kb/vault"
+import { Chunk, Effect, Layer } from "effect"
 import {
   DataviewEvaluator,
   DataviewExpression,
@@ -33,14 +33,36 @@ const record = (
 
 const parserEvaluatorLayer = Layer.mergeAll(DataviewParser.layerNoDeps, DataviewEvaluator.layerNoDeps)
 
-const vaultLayer = (tasksBySource: Readonly<Record<string, ReadonlyArray<ParsedTask>>>) =>
+const catalogTaskRecord = (task: ParsedTask): CatalogModel.CatalogTaskRecord => {
+  const separatorIndex = task.source.path.lastIndexOf("/")
+  const folder = separatorIndex === -1 ? "" : task.source.path.slice(0, separatorIndex)
+  const fileName = separatorIndex === -1 ? task.source.path : task.source.path.slice(separatorIndex + 1)
+  const title = fileName.endsWith(".md") ? fileName.slice(0, -3) : fileName
+
+  return {
+    path: task.source.path,
+    folder,
+    title,
+    task,
+    done: task.done,
+    text: task.text,
+    lineNumber: task.source.lineNumber,
+    fields: task.fields,
+    unknownFields: task.unknownFields,
+    tags: Chunk.fromIterable(task.tags)
+  }
+}
+
+const catalogLayer = (tasksBySource: Readonly<Record<string, ReadonlyArray<ParsedTask>>>) =>
   Layer.succeed(
-    VaultService,
-    VaultService.of({
-      readText: () => Effect.die(new Error("readText should not be used by dataview tests")),
-      writeText: () => Effect.die(new Error("writeText should not be used by dataview tests")),
-      readMarkdownTree: () => Effect.die(new Error("readMarkdownTree should not be used by dataview tests")),
-      readTasks: (sourceName) => Effect.succeed(tasksBySource[sourceName] ?? [])
+    CatalogService,
+    CatalogService.of({
+      snapshot: () => Effect.die(new Error("snapshot should not be used by dataview tests")),
+      listNotes: () => Effect.die(new Error("listNotes should not be used by dataview tests")),
+      listTasks: (sourceName) =>
+        Effect.succeed(Chunk.fromIterable((tasksBySource[sourceName] ?? []).map(catalogTaskRecord))),
+      listTags: () => Effect.die(new Error("listTags should not be used by dataview tests")),
+      search: () => Effect.die(new Error("search should not be used by dataview tests"))
     })
   )
 
@@ -57,7 +79,7 @@ const programLayer = (
         DataviewFunctionRegistry.layerNoDeps
       )
     ),
-    Layer.provide(Layer.mergeAll(vaultLayer(tasksBySource), CalendarService.layerTest(today)))
+    Layer.provide(Layer.mergeAll(catalogLayer(tasksBySource), CalendarService.layerTest(today)))
   )
 
 describe("DataviewParser", () => {
@@ -235,7 +257,7 @@ SORT due ASC, score DESC`
 })
 
 describe("DataviewRecordSource and DataviewProgram", () => {
-  it.effect("read records only from the query source through VaultService", () =>
+  it.effect("read records only from the query source through CatalogService", () =>
     Effect.gen(function* () {
       const parser = yield* DataviewParser
       const recordSource = yield* DataviewRecordSource
@@ -254,7 +276,7 @@ FROM "Inbox"`)
     }).pipe(
       Effect.provide(Layer.mergeAll(DataviewParser.layerNoDeps, DataviewRecordSource.layerNoDeps)),
       Effect.provide(
-        vaultLayer({
+        catalogLayer({
           Inbox: [parsed("inbox task", 4, { source: source(4, "Inbox.md") })],
           Projects: [parsed("project task", 5, { source: source(5, "Projects.md") })]
         })
@@ -328,7 +350,7 @@ SORT scheduled ASC`)
     }).pipe(
       Effect.provide(DataviewRecordSource.layerNoDeps),
       Effect.provide(
-        vaultLayer({
+        catalogLayer({
           Inbox: [parsed("unused", 1)]
         })
       )

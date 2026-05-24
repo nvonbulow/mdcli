@@ -1,3 +1,4 @@
+import { Chunk, Data } from "effect"
 import type { MarkdownFencedBlock, SourceSpan } from "./markdown/MarkdownModel"
 import type { ParsedTask } from "./TaskModel"
 import type { MarkdownParseError } from "./VaultErrors"
@@ -13,13 +14,13 @@ export type CatalogNoteRecord = {
   readonly path: string
   readonly folder: string
   readonly title: string
-  readonly frontmatter: ReadonlyArray<CatalogFrontmatterRecord>
-  readonly headings: ReadonlyArray<CatalogHeadingRecord>
-  readonly links: ReadonlyArray<CatalogLinkRecord>
-  readonly tags: ReadonlyArray<CatalogTagRecord>
-  readonly listItems: ReadonlyArray<CatalogListItemRecord>
-  readonly tasks: ReadonlyArray<CatalogTaskRecord>
-  readonly fencedBlocks: ReadonlyArray<CatalogFencedBlockRecord>
+  readonly frontmatter: Chunk.Chunk<CatalogFrontmatterRecord>
+  readonly headings: Chunk.Chunk<CatalogHeadingRecord>
+  readonly links: Chunk.Chunk<CatalogLinkRecord>
+  readonly tags: Chunk.Chunk<CatalogTagRecord>
+  readonly listItems: Chunk.Chunk<CatalogListItemRecord>
+  readonly tasks: Chunk.Chunk<CatalogTaskRecord>
+  readonly fencedBlocks: Chunk.Chunk<CatalogFencedBlockRecord>
 }
 
 export type CatalogFrontmatterRecord = CatalogSourceReference & {
@@ -57,7 +58,7 @@ export type CatalogTaskRecord = CatalogSourceReference & {
   readonly lineNumber: number
   readonly fields: Readonly<Record<string, string>>
   readonly unknownFields: Readonly<Record<string, string>>
-  readonly tags: ReadonlyArray<string>
+  readonly tags: Chunk.Chunk<string>
 }
 
 export type CatalogFencedBlockRecord = CatalogSourceReference & {
@@ -77,21 +78,37 @@ export type CatalogDiagnostic = {
 
 export type CatalogSnapshot = {
   readonly source: string
-  readonly notes: ReadonlyArray<CatalogNoteRecord>
-  readonly frontmatter: ReadonlyArray<CatalogFrontmatterRecord>
-  readonly headings: ReadonlyArray<CatalogHeadingRecord>
-  readonly links: ReadonlyArray<CatalogLinkRecord>
-  readonly tags: ReadonlyArray<CatalogTagRecord>
-  readonly listItems: ReadonlyArray<CatalogListItemRecord>
-  readonly tasks: ReadonlyArray<CatalogTaskRecord>
-  readonly fencedBlocks: ReadonlyArray<CatalogFencedBlockRecord>
-  readonly diagnostics: ReadonlyArray<CatalogDiagnostic>
+  readonly notes: Chunk.Chunk<CatalogNoteRecord>
+  readonly frontmatter: Chunk.Chunk<CatalogFrontmatterRecord>
+  readonly headings: Chunk.Chunk<CatalogHeadingRecord>
+  readonly links: Chunk.Chunk<CatalogLinkRecord>
+  readonly tags: Chunk.Chunk<CatalogTagRecord>
+  readonly listItems: Chunk.Chunk<CatalogListItemRecord>
+  readonly tasks: Chunk.Chunk<CatalogTaskRecord>
+  readonly fencedBlocks: Chunk.Chunk<CatalogFencedBlockRecord>
+  readonly diagnostics: Chunk.Chunk<CatalogDiagnostic>
 }
 
-export type CatalogSearchKind = "note" | "task" | "heading" | "link" | "tag"
-
-export type CatalogSearchResult = CatalogSourceReference & {
-  readonly kind: CatalogSearchKind
-  readonly text: string
-  readonly record: CatalogNoteRecord | CatalogTaskRecord | CatalogHeadingRecord | CatalogLinkRecord | CatalogTagRecord
-}
+export type CatalogSearchResult = Data.TaggedEnum<{
+  readonly Note: CatalogSourceReference & {
+    readonly text: string
+    readonly record: CatalogNoteRecord
+  }
+  readonly Task: CatalogSourceReference & {
+    readonly text: string
+    readonly record: CatalogTaskRecord
+  }
+  readonly Heading: CatalogSourceReference & {
+    readonly text: string
+    readonly record: CatalogHeadingRecord
+  }
+  readonly Link: CatalogSourceReference & {
+    readonly text: string
+    readonly record: CatalogLinkRecord
+  }
+  readonly Tag: CatalogSourceReference & {
+    readonly text: string
+    readonly record: CatalogTagRecord
+  }
+}>
+export const CatalogSearchResult = Data.taggedEnum<CatalogSearchResult>()

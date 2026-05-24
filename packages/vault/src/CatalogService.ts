@@ -1,8 +1,7 @@
-import { Context, Effect, Layer, String as Str } from "effect"
+import { Chunk, Context, Effect, Layer, String as Str, Trie } from "effect"
 import { Markdown } from "./markdown/Markdown"
-import { MarkdownParser } from "./markdown/MarkdownParser"
+import { MarkdownFile } from "./markdown/MarkdownModel"
 import type {
-  MarkdownFile,
   MarkdownFencedBlock,
   MarkdownHeading,
   MarkdownListItem,
@@ -11,10 +10,11 @@ import type {
   RawFrontmatter,
   SourceSpan
 } from "./markdown/MarkdownModel"
-import { parsedTasksFromMarkdown } from "./TaskMarkdownParser"
+import { parsedTasksFromMarkdownFile } from "./TaskParser"
 import type { ParsedTask } from "./TaskModel"
 import { VaultService } from "./VaultService"
-import type { VaultIoError, MarkdownParseError } from "./VaultErrors"
+import type { MarkdownParseError, VaultIoError } from "./VaultErrors"
+import { CatalogSearchResult } from "./CatalogModel"
 import type {
   CatalogDiagnostic,
   CatalogFencedBlockRecord,
@@ -23,44 +23,40 @@ import type {
   CatalogLinkRecord,
   CatalogListItemRecord,
   CatalogNoteRecord,
-  CatalogSearchResult,
   CatalogSnapshot,
   CatalogTagRecord,
   CatalogTaskRecord
 } from "./CatalogModel"
 
+type CatalogServiceError = MarkdownParseError | VaultIoError
+
 export type CatalogServiceShape = {
-  readonly snapshot: (source: string) => Effect.Effect<CatalogSnapshot, VaultIoError>
-  readonly listNotes: (source: string) => Effect.Effect<ReadonlyArray<CatalogNoteRecord>, VaultIoError>
-  readonly listTasks: (source: string) => Effect.Effect<ReadonlyArray<CatalogTaskRecord>, VaultIoError>
-  readonly listTags: (source: string) => Effect.Effect<ReadonlyArray<CatalogTagRecord>, VaultIoError>
-  readonly search: (source: string, query: string) => Effect.Effect<ReadonlyArray<CatalogSearchResult>, VaultIoError>
+  readonly snapshot: (source: string) => Effect.Effect<CatalogSnapshot, CatalogServiceError>
+  readonly listNotes: (source: string) => Effect.Effect<Chunk.Chunk<CatalogNoteRecord>, CatalogServiceError>
+  readonly listTasks: (source: string) => Effect.Effect<Chunk.Chunk<CatalogTaskRecord>, CatalogServiceError>
+  readonly listTags: (source: string) => Effect.Effect<Chunk.Chunk<CatalogTagRecord>, CatalogServiceError>
+  readonly search: (
+    source: string,
+    query: string
+  ) => Effect.Effect<Chunk.Chunk<CatalogSearchResult>, CatalogServiceError>
 }
 
 export class CatalogService extends Context.Service<CatalogService, CatalogServiceShape>()("@kb/vault/CatalogService") {
-  static readonly layerNoDeps: Layer.Layer<CatalogService, never, VaultService | MarkdownParser> = Layer.effect(
+  static readonly layerNoDeps: Layer.Layer<CatalogService, never, VaultService> = Layer.effect(
     CatalogService,
     makeCatalogService()
   )
 
-  static readonly layer: Layer.Layer<CatalogService, never, VaultService | MarkdownParser> = CatalogService.layerNoDeps
+  static readonly layer: Layer.Layer<CatalogService, never, VaultService> = CatalogService.layerNoDeps
 }
 
 function makeCatalogService() {
   return Effect.gen(function* () {
     const vault = yield* VaultService
-    const parser = yield* MarkdownParser
-
     const snapshot = Effect.fn("CatalogService.snapshot")(function* (source: string) {
-      const files = yield* vault.readMarkdownTree(source)
-      const sortedFiles = [...files].sort((left, right) => left.path.localeCompare(right.path))
-      const cataloged = yield* Effect.forEach(sortedFiles, (file) =>
-        parser.parse(file.contents).pipe(
-          Effect.match({
-            onFailure: (cause) => catalogParseFailure(file.path, cause),
-            onSuccess: (parsed) => catalogParsedFile(file.path, file.contents, parsed)
-          })
-        )
+      const tree = yield* vault.readMarkdownTree(source)
+      const cataloged = Chunk.map(Chunk.fromIterable(Trie.entries(tree.files)), ([path, file]) =>
+        catalogParsedFile(path, file)
       )
 
       return snapshotFromCatalogedFiles(source, cataloged)
@@ -94,27 +90,27 @@ function makeCatalogService() {
 
 type CatalogedFile = {
   readonly note?: CatalogNoteRecord
-  readonly frontmatter: ReadonlyArray<CatalogFrontmatterRecord>
-  readonly headings: ReadonlyArray<CatalogHeadingRecord>
-  readonly links: ReadonlyArray<CatalogLinkRecord>
-  readonly tags: ReadonlyArray<CatalogTagRecord>
-  readonly listItems: ReadonlyArray<CatalogListItemRecord>
-  readonly tasks: ReadonlyArray<CatalogTaskRecord>
-  readonly fencedBlocks: ReadonlyArray<CatalogFencedBlockRecord>
-  readonly diagnostics: ReadonlyArray<CatalogDiagnostic>
+  readonly frontmatter: Chunk.Chunk<CatalogFrontmatterRecord>
+  readonly headings: Chunk.Chunk<CatalogHeadingRecord>
+  readonly links: Chunk.Chunk<CatalogLinkRecord>
+  readonly tags: Chunk.Chunk<CatalogTagRecord>
+  readonly listItems: Chunk.Chunk<CatalogListItemRecord>
+  readonly tasks: Chunk.Chunk<CatalogTaskRecord>
+  readonly fencedBlocks: Chunk.Chunk<CatalogFencedBlockRecord>
+  readonly diagnostics: Chunk.Chunk<CatalogDiagnostic>
 }
 
-const catalogParsedFile = (path: string, contents: string, file: MarkdownFile): CatalogedFile => {
+const catalogParsedFile = (path: string, file: MarkdownFile): CatalogedFile => {
   const source = sourceFromPath(path)
-  const frontmatter = Markdown.getFrontmatter(file).map((record) => frontmatterRecord(source, record))
-  const headings = Markdown.getHeadings(file).map((record) => headingRecord(source, record))
-  const links = Markdown.getWikilinks(file).map((record) => linkRecord(source, record))
-  const tags = Markdown.getTags(file).map((record) => tagRecord(source, record))
-  const listItems = Markdown.getListItems(file).map((record) => listItemRecord(source, record))
-  const tasks = parsedTasksFromMarkdown(Markdown.getTasks(file), contents, path).map((record) =>
-    taskRecord(source, record)
-  )
-  const fencedBlocks = Markdown.getFencedBlocks(file).map((record) => fencedBlockRecord(source, record))
+  const markdownFile =
+    file.path === path ? file : new MarkdownFile({ path, contents: file.contents, mdast: file.mdast })
+  const frontmatter = Chunk.map(Markdown.getFrontmatter(markdownFile), (record) => frontmatterRecord(source, record))
+  const headings = Chunk.map(Markdown.getHeadings(markdownFile), (record) => headingRecord(source, record))
+  const links = Chunk.map(Markdown.getWikilinks(markdownFile), (record) => linkRecord(source, record))
+  const tags = Chunk.map(Markdown.getTags(markdownFile), (record) => tagRecord(source, record))
+  const listItems = Chunk.map(Markdown.getListItems(markdownFile), (record) => listItemRecord(source, record))
+  const tasks = Chunk.map(parsedTasksFromMarkdownFile(markdownFile), (record) => taskRecord(source, record))
+  const fencedBlocks = Chunk.map(Markdown.getFencedBlocks(markdownFile), (record) => fencedBlockRecord(source, record))
 
   return {
     note: {
@@ -136,43 +132,20 @@ const catalogParsedFile = (path: string, contents: string, file: MarkdownFile): 
     listItems,
     tasks,
     fencedBlocks,
-    diagnostics: []
+    diagnostics: Chunk.empty()
   }
 }
-
-const catalogParseFailure = (path: string, cause: MarkdownParseError): CatalogedFile => {
-  const source = sourceFromPath(path)
-  return {
-    frontmatter: [],
-    headings: [],
-    links: [],
-    tags: [],
-    listItems: [],
-    tasks: [],
-    fencedBlocks: [],
-    diagnostics: [
-      {
-        path: source.path,
-        folder: source.folder,
-        title: source.title,
-        message: cause.message,
-        cause
-      }
-    ]
-  }
-}
-
-const snapshotFromCatalogedFiles = (source: string, files: ReadonlyArray<CatalogedFile>): CatalogSnapshot => ({
+const snapshotFromCatalogedFiles = (source: string, files: Chunk.Chunk<CatalogedFile>): CatalogSnapshot => ({
   source,
-  notes: files.flatMap((file) => (file.note === undefined ? [] : [file.note])),
-  frontmatter: files.flatMap((file) => file.frontmatter),
-  headings: files.flatMap((file) => file.headings),
-  links: files.flatMap((file) => file.links),
-  tags: files.flatMap((file) => file.tags),
-  listItems: files.flatMap((file) => file.listItems),
-  tasks: files.flatMap((file) => file.tasks),
-  fencedBlocks: files.flatMap((file) => file.fencedBlocks),
-  diagnostics: files.flatMap((file) => file.diagnostics)
+  notes: Chunk.flatMap(files, (file) => (file.note === undefined ? Chunk.empty() : Chunk.of(file.note))),
+  frontmatter: Chunk.flatMap(files, (file) => file.frontmatter),
+  headings: Chunk.flatMap(files, (file) => file.headings),
+  links: Chunk.flatMap(files, (file) => file.links),
+  tags: Chunk.flatMap(files, (file) => file.tags),
+  listItems: Chunk.flatMap(files, (file) => file.listItems),
+  tasks: Chunk.flatMap(files, (file) => file.tasks),
+  fencedBlocks: Chunk.flatMap(files, (file) => file.fencedBlocks),
+  diagnostics: Chunk.flatMap(files, (file) => file.diagnostics)
 })
 
 type SourceParts = {
@@ -235,7 +208,7 @@ const taskRecord = (source: SourceParts, record: ParsedTask): CatalogTaskRecord 
   lineNumber: record.source.lineNumber,
   fields: record.fields,
   unknownFields: record.unknownFields,
-  tags: record.tags
+  tags: Chunk.fromIterable(record.tags)
 })
 
 const fencedBlockRecord = (source: SourceParts, record: MarkdownFencedBlock): CatalogFencedBlockRecord => ({
@@ -246,41 +219,41 @@ const fencedBlockRecord = (source: SourceParts, record: MarkdownFencedBlock): Ca
   ...(record.meta === undefined ? {} : { meta: record.meta })
 })
 
-const searchSnapshot = (snapshot: CatalogSnapshot, query: string): ReadonlyArray<CatalogSearchResult> => {
+const searchSnapshot = (snapshot: CatalogSnapshot, query: string): Chunk.Chunk<CatalogSearchResult> => {
   const needle = Str.toLowerCase(query)
   const results: Array<CatalogSearchResult> = []
 
   for (const note of snapshot.notes) {
     if (matches(needle, note.path, note.title)) {
-      results.push({ ...note, kind: "note", text: note.title, record: note })
+      results.push(CatalogSearchResult.Note({ ...note, text: note.title, record: note }))
     }
   }
 
   for (const task of snapshot.tasks) {
     if (matches(needle, task.text)) {
-      results.push({ ...task, kind: "task", text: task.text, record: task })
+      results.push(CatalogSearchResult.Task({ ...task, text: task.text, record: task }))
     }
   }
 
   for (const heading of snapshot.headings) {
     if (matches(needle, heading.text)) {
-      results.push({ ...heading, kind: "heading", text: heading.text, record: heading })
+      results.push(CatalogSearchResult.Heading({ ...heading, text: heading.text, record: heading }))
     }
   }
 
   for (const link of snapshot.links) {
     if (matches(needle, link.value, link.target, link.alias, link.heading, link.block)) {
-      results.push({ ...link, kind: "link", text: link.value, record: link })
+      results.push(CatalogSearchResult.Link({ ...link, text: link.value, record: link }))
     }
   }
 
   for (const tag of snapshot.tags) {
     if (matches(needle, tag.value)) {
-      results.push({ ...tag, kind: "tag", text: tag.value, record: tag })
+      results.push(CatalogSearchResult.Tag({ ...tag, text: tag.value, record: tag }))
     }
   }
 
-  return results
+  return Chunk.fromIterable(results)
 }
 
 const matches = (needle: string, ...values: ReadonlyArray<string | undefined>): boolean => {

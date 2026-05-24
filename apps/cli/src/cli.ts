@@ -9,7 +9,7 @@ import {
   MarkdownDataviewRenderer,
   MarkdownFenceParser
 } from "@kb/dataview"
-import { CalendarService, TaskValidator, VaultService } from "@kb/vault"
+import { CalendarService, CatalogService, TaskValidator, VaultService } from "@kb/vault"
 import { Effect } from "effect"
 import { Command } from "effect/unstable/cli"
 import { DashboardCommand } from "./DashboardCommand"
@@ -29,6 +29,7 @@ const KbCommand = KbRoot.pipe(
   Command.provide(MarkdownFenceParser.layerNoDeps),
   Command.provide(CalendarService.layerLive),
   Command.provide(TaskValidator.layerLive),
+  Command.provide(CatalogService.layer),
   Command.provide((flags) => VaultService.makeLayer({ root: flags.vault })),
   Command.provide((flags) => rendererLayerForFormat(flags.format))
 )

@@ -17,4 +17,5 @@
 - Keep app and package code Effect-based TypeScript only.
 - Do not introduce `async`, `await`, `try/catch`, `throw`, `Date.now`, `new Date`, or TypeScript `interface` in app/package code.
 - Prefer Jujutsu (`jj`) for version-control operations and keep logical work in atomic changesets.
+- Treat `./vault` as a separate nested Jujutsu repository for vault content. Do not add vault Markdown/content to the root code repository; run vault version-control commands from `vault/` or with `jj -R vault`.
 - `aube --filter @kb/cli run ...` executes scripts from `apps/cli`, so `--vault ./vault` resolves to `apps/cli/vault`; use `--vault ../../vault` for filtered package smoke checks, or run the CLI from the workspace root when verifying the default `./vault`.

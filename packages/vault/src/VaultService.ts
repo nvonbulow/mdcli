@@ -1,8 +1,10 @@
 import { Array as Arr, Context, Effect, FileSystem, Layer, Path, String as Str } from "effect"
 import type { PlatformError } from "effect/PlatformError"
+import { Markdown } from "./markdown/Markdown"
+import { MarkdownParser } from "./markdown/MarkdownParser"
 import type { ParsedTask } from "./TaskModel"
-import { TaskMarkdownParser } from "./TaskMarkdownParser"
-import type { TaskParseError } from "./VaultErrors"
+import { parsedTasksFromMarkdown } from "./TaskMarkdownParser"
+import type { MarkdownParseError, TaskParseError } from "./VaultErrors"
 import { VaultIoError } from "./VaultErrors"
 
 export type VaultMarkdownFile = {
@@ -14,12 +16,14 @@ type VaultServiceShape = {
   readonly readText: (path: string) => Effect.Effect<string, VaultIoError>
   readonly writeText: (path: string, contents: string) => Effect.Effect<void, VaultIoError>
   readonly readMarkdownTree: (source: string) => Effect.Effect<ReadonlyArray<VaultMarkdownFile>, VaultIoError>
-  readonly readTasks: (source: string) => Effect.Effect<ReadonlyArray<ParsedTask>, VaultIoError | TaskParseError>
+  readonly readTasks: (
+    source: string
+  ) => Effect.Effect<ReadonlyArray<ParsedTask>, VaultIoError | TaskParseError | MarkdownParseError>
 }
 
 export class VaultService extends Context.Service<VaultService, VaultServiceShape>()("@kb/vault/VaultService") {
   static makeLayer({ root }: { readonly root: string }) {
-    return Layer.effect(VaultService, makeVaultService(root)).pipe(Layer.provide(TaskMarkdownParser.layer))
+    return Layer.effect(VaultService, makeVaultService(root)).pipe(Layer.provide(MarkdownParser.layer))
   }
 }
 
@@ -27,7 +31,7 @@ const makeVaultService = (root: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem
     const pathService = yield* Path.Path
-    const parser = yield* TaskMarkdownParser
+    const parser = yield* MarkdownParser
 
     const readText = Effect.fn("VaultService.readText")(function* (path: string) {
       const fullPath = pathService.join(root, path)
@@ -55,7 +59,12 @@ const makeVaultService = (root: string) =>
 
     const readTasks = Effect.fn("VaultService.readTasks")(function* (source: string) {
       const markdownFiles = yield* readMarkdownTree(source)
-      const parsed = yield* Effect.forEach(markdownFiles, (file) => parser.parseFile(file.contents, file.path))
+      const parsed = yield* Effect.forEach(markdownFiles, (file) =>
+        Effect.gen(function* () {
+          const markdownFile = yield* parser.parse(file.contents)
+          return parsedTasksFromMarkdown(Markdown.getTasks(markdownFile), file.contents, file.path)
+        })
+      )
       return Arr.flatten(parsed)
     })
 

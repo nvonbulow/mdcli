@@ -6,7 +6,7 @@ import { TaskMarkdownParser } from "../src/TaskMarkdownParser"
 const parserLayer = TaskMarkdownParser.layer
 
 describe("TaskMarkdownParser", () => {
-  it.effect("parses #task checkboxes with source locations through layers", () =>
+  it.effect("parses #task checkboxes with AST source locations through layers", () =>
     Effect.gen(function* () {
       const parser = yield* TaskMarkdownParser
       const tasks = yield* parser.parseFile(
@@ -23,6 +23,8 @@ describe("TaskMarkdownParser", () => {
       assert.strictEqual(tasks[0]?.text, "Open item")
       assert.strictEqual(tasks[0]?.source.path, "30-Projects/Personal/Meal Planning.md")
       assert.strictEqual(tasks[0]?.source.lineNumber, 2)
+      assert.strictEqual(tasks[1]?.text, "Done item")
+      assert.strictEqual(tasks[1]?.source.lineNumber, 3)
       assert.deepStrictEqual(tasks[0]?.tags, ["#task", "#errand"])
       assert.strictEqual(tasks[1]?.done, true)
       assert.strictEqual(tasks[1]?.completed, "2026-05-23")
@@ -44,6 +46,9 @@ describe("TaskMarkdownParser", () => {
       assert.strictEqual(fields.area, "[[Personal]]")
       assert.strictEqual(fields.project, "[[Meal Planning]]")
       assert.strictEqual(fields.energy, "low")
+      const stripped = yield* inlineFields.strip("Grocery shopping #task [area:: [[Personal]]] (priority:: high)")
+
+      assert.strictEqual(stripped, "Grocery shopping #task")
     }).pipe(Effect.provide(InlineFieldParser.layerNoDeps))
   )
 
@@ -63,6 +68,7 @@ describe("TaskMarkdownParser", () => {
       assert.strictEqual(tasks[0]?.repeat, "every week")
       assert.strictEqual(tasks[0]?.area, "[[Personal]]")
       assert.strictEqual(tasks[0]?.project, "[[Meal Planning]]")
+      assert.strictEqual(tasks[0]?.fields.energy, "low")
       assert.strictEqual(tasks[0]?.unknownFields.energy, "low")
     }).pipe(Effect.provide(parserLayer))
   )
@@ -84,7 +90,7 @@ describe("TaskMarkdownParser", () => {
     }).pipe(Effect.provide(parserLayer))
   )
 
-  it.effect("extracts wikilinks without stopping at nested brackets", () =>
+  it.effect("extracts wikilink field values without stopping at nested brackets", () =>
     Effect.gen(function* () {
       const inlineFields = yield* InlineFieldParser
       const fields = yield* inlineFields.parse("#task [depends:: [[Meal Planning#^anchor]]] [area:: [[Personal]]]")
@@ -92,5 +98,28 @@ describe("TaskMarkdownParser", () => {
       assert.strictEqual(fields.depends, "[[Meal Planning#^anchor]]")
       assert.strictEqual(fields.area, "[[Personal]]")
     }).pipe(Effect.provide(InlineFieldParser.layerNoDeps))
+  )
+
+  it.effect("derives nested AST task lines without including child task text", () =>
+    Effect.gen(function* () {
+      const parser = yield* TaskMarkdownParser
+      const tasks = yield* parser.parseFile(
+        [
+          "- [ ] Parent #task [area:: [[Work]]]",
+          "  - [ ] Child #task [depends:: [[Parent#^anchor]]] [priority:: high]"
+        ].join("\n"),
+        "30-Projects/Work/Nested.md"
+      )
+
+      assert.strictEqual(tasks.length, 2)
+      assert.strictEqual(tasks[0]?.text, "Parent")
+      assert.strictEqual(tasks[0]?.source.lineNumber, 1)
+      assert.strictEqual(tasks[0]?.depends, undefined)
+      assert.strictEqual(tasks[0]?.unknownFields.priority, undefined)
+      assert.strictEqual(tasks[1]?.text, "Child")
+      assert.strictEqual(tasks[1]?.source.lineNumber, 2)
+      assert.strictEqual(tasks[1]?.depends, "[[Parent#^anchor]]")
+      assert.strictEqual(tasks[1]?.unknownFields.priority, "high")
+    }).pipe(Effect.provide(parserLayer))
   )
 })

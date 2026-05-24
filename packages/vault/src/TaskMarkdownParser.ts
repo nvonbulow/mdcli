@@ -1,71 +1,168 @@
+import { stripInlineFields } from "@kb/remark-obsidian"
 import { String as Str } from "effect"
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
-import { InlineFieldParser } from "./InlineFieldParser"
+import { Markdown } from "./markdown/Markdown"
+import { MarkdownParser } from "./markdown/MarkdownParser"
+import type { MarkdownInlineField, MarkdownTask } from "./markdown/MarkdownModel"
 import { ParsedTask, TaskSource, type IsoDate } from "./TaskModel"
-import type { TaskParseError } from "./VaultErrors"
+import type { MarkdownParseError, TaskParseError } from "./VaultErrors"
 
 export type TaskMarkdownParserService = {
-  readonly parseFile: (markdown: string, sourcePath: string) => Effect.Effect<ReadonlyArray<ParsedTask>, TaskParseError>
+  readonly parseFile: (
+    markdown: string,
+    sourcePath: string
+  ) => Effect.Effect<ReadonlyArray<ParsedTask>, TaskParseError | MarkdownParseError>
 }
 
 export class TaskMarkdownParser extends Context.Service<TaskMarkdownParser, TaskMarkdownParserService>()(
   "@kb/vault/TaskMarkdownParser"
 ) {
-  static readonly layerNoDeps: Layer.Layer<TaskMarkdownParser, never, InlineFieldParser> = Layer.effect(
+  static readonly layerNoDeps: Layer.Layer<TaskMarkdownParser, never, MarkdownParser> = Layer.effect(
     this,
     Effect.gen(function* () {
-      const inlineFields = yield* InlineFieldParser
+      const parser = yield* MarkdownParser
       return TaskMarkdownParser.of({
         parseFile: Effect.fn("TaskMarkdownParser.parseFile")(function* (markdown: string, sourcePath: string) {
-          const tasks: Array<ParsedTask> = []
-          const lines = Str.split(markdown, /\r?\n/)
-
-          for (let index = 0; index < lines.length; index += 1) {
-            const line = lines[index] ?? ""
-            const candidate = taskLineCandidate(line)
-            if (candidate === undefined) {
-              continue
-            }
-
-            const taskTag = candidate.body.indexOf("#task")
-            if (taskTag === -1) {
-              continue
-            }
-
-            const fields = yield* inlineFields.parse(candidate.body)
-            const text = yield* inlineFields.strip(candidate.body.slice(0, taskTag))
-            const task = parseTaskLineWithFields(candidate.marker, candidate.body, sourcePath, index + 1, fields, text)
-            if (task !== undefined) {
-              tasks.push(task)
-            }
-          }
-
-          return tasks
+          const markdownFile = yield* parser.parse(markdown)
+          return parsedTasksFromMarkdown(Markdown.getTasks(markdownFile), markdown, sourcePath)
         })
       })
     })
   )
-  static readonly layer: Layer.Layer<TaskMarkdownParser> = Layer.provide(
-    this.layerNoDeps,
-    InlineFieldParser.layerNoDeps
-  )
+  static readonly layer: Layer.Layer<TaskMarkdownParser> = Layer.provide(this.layerNoDeps, MarkdownParser.layer)
 }
 
-const taskLinePattern = /^\s*-\s+\[([ xX])\]\s+(.*)$/
-const tagPattern = /#[A-Za-z0-9/_-]+/g
+const taskTag = "#task"
+const taskTextTagPattern = /#[A-Za-z0-9/_-]+\b/g
+const taskBodyPattern = /^\s*[-*+]\s+\[[ xX]\]\s*/
+const whitespacePattern = /\s{2,}/g
 const knownFields = new Set(["scheduled", "due", "completed", "depends", "repeat", "area", "project"])
 
-const extractTags = (input: string): ReadonlyArray<string> => {
+export const parsedTasksFromMarkdown = (
+  tasks: ReadonlyArray<MarkdownTask>,
+  markdown: string,
+  sourcePath: string
+): ReadonlyArray<ParsedTask> => {
+  const parsed: Array<ParsedTask> = []
+  for (const task of tasks) {
+    const tags = taskTags(task, markdown)
+    if (!tags.includes(taskTag)) {
+      continue
+    }
+    parsed.push(parsedTaskFromMarkdown(task, markdown, sourcePath, tags))
+  }
+  return parsed
+}
+
+const taskTags = (task: MarkdownTask, markdown: string): ReadonlyArray<string> => {
+  const lineRange = taskFirstSourceLineRange(task, markdown)
   const tags: Array<string> = []
-  for (const match of input.matchAll(tagPattern)) {
-    const tag = match[0]
-    if (!tags.includes(tag)) {
-      tags.push(tag)
+  for (const tag of task.tags) {
+    if (
+      lineRange !== undefined &&
+      (tag.span === undefined || tag.span.start < lineRange.start || tag.span.end > lineRange.end)
+    ) {
+      continue
+    }
+    if (!tags.includes(tag.value)) {
+      tags.push(tag.value)
     }
   }
   return tags
+}
+
+const parsedTaskFromMarkdown = (
+  task: MarkdownTask,
+  markdown: string,
+  path: string,
+  tags: ReadonlyArray<string>
+): ParsedTask => {
+  const fields = taskFields(task.fields, taskFirstSourceLineRange(task, markdown))
+  const unknownFields = taskUnknownFields(fields)
+  const text = taskText(task, markdown)
+
+  return new ParsedTask({
+    done: task.done,
+    text,
+    source: new TaskSource({ path, lineNumber: offsetLineNumber(markdown, task.span?.start ?? 0) }),
+    fields,
+    unknownFields,
+    tags,
+    ...dateField("scheduled", fields.scheduled),
+    ...dateField("due", fields.due),
+    ...dateField("completed", fields.completed),
+    ...(fields.depends === undefined ? {} : { depends: fields.depends }),
+    ...(fields.repeat === undefined ? {} : { repeat: fields.repeat }),
+    ...(fields.area === undefined ? {} : { area: fields.area }),
+    ...(fields.project === undefined ? {} : { project: fields.project })
+  })
+}
+
+const taskFields = (
+  inlineFields: ReadonlyArray<MarkdownInlineField>,
+  lineRange: { readonly start: number; readonly end: number } | undefined
+): Readonly<Record<string, string>> => {
+  const fields: Record<string, string> = {}
+  for (const field of inlineFields) {
+    if (lineRange !== undefined && (field.span.start < lineRange.start || field.span.end > lineRange.end)) {
+      continue
+    }
+    fields[field.key] = field.value
+  }
+  return fields
+}
+
+const taskUnknownFields = (fields: Readonly<Record<string, string>>): Readonly<Record<string, string>> => {
+  const unknownFields: Record<string, string> = {}
+  for (const [key, value] of Object.entries(fields)) {
+    if (!knownFields.has(key)) {
+      unknownFields[key] = value
+    }
+  }
+  return unknownFields
+}
+
+const taskText = (task: MarkdownTask, markdown: string): string => {
+  const sourceLine = taskFirstSourceLine(task, markdown)
+  const body = sourceLine === undefined ? task.text : sourceLine.replace(taskBodyPattern, "")
+  return Str.trim(stripInlineFields(body).replace(taskTextTagPattern, "").replace(whitespacePattern, " "))
+}
+
+const taskFirstSourceLine = (task: MarkdownTask, markdown: string): string | undefined => {
+  const lineRange = taskFirstSourceLineRange(task, markdown)
+  if (lineRange === undefined) {
+    return undefined
+  }
+  return markdown.slice(lineRange.start, lineRange.end)
+}
+
+const taskFirstSourceLineRange = (
+  task: MarkdownTask,
+  markdown: string
+): { readonly start: number; readonly end: number } | undefined => {
+  const start = task.span?.start
+  if (start === undefined) {
+    return undefined
+  }
+
+  const lineEnd = markdown.indexOf("\n", start)
+  if (lineEnd === -1) {
+    return { start, end: markdown.length }
+  }
+  return { start, end: lineEnd }
+}
+
+const offsetLineNumber = (markdown: string, offset: number): number => {
+  let lineNumber = 1
+  const end = Math.min(offset, markdown.length)
+  for (let index = 0; index < end; index += 1) {
+    if (markdown.charCodeAt(index) === 10) {
+      lineNumber += 1
+    }
+  }
+  return lineNumber
 }
 
 const isIsoDate = (value: string): value is IsoDate => {
@@ -77,61 +174,6 @@ const isIsoDate = (value: string): value is IsoDate => {
   const month = Number(value.slice(5, 7))
   const day = Number(value.slice(8, 10))
   return month >= 1 && month <= 12 && day >= 1 && day <= daysInMonth(year, month)
-}
-
-const taskLineCandidate = (line: string): { readonly marker: string; readonly body: string } | undefined => {
-  if (!Str.includes("#task")(line)) {
-    return undefined
-  }
-
-  const match = taskLinePattern.exec(line)
-  if (match === null) {
-    return undefined
-  }
-
-  const body = match[2] ?? ""
-  if (body.indexOf("#task") === -1) {
-    return undefined
-  }
-
-  return { marker: match[1] ?? " ", body }
-}
-
-const parseTaskLineWithFields = (
-  marker: string,
-  body: string,
-  path: string,
-  lineNumber: number,
-  fields: Readonly<Record<string, string>>,
-  text: string
-): ParsedTask | undefined => {
-  const taskTag = body.indexOf("#task")
-  if (taskTag === -1) {
-    return undefined
-  }
-
-  const unknownFields: Record<string, string> = {}
-  for (const [key, value] of Object.entries(fields)) {
-    if (!knownFields.has(key)) {
-      unknownFields[key] = value
-    }
-  }
-
-  return new ParsedTask({
-    done: marker === "x" || marker === "X",
-    text,
-    source: new TaskSource({ path, lineNumber }),
-    fields,
-    unknownFields,
-    tags: extractTags(body),
-    ...dateField("scheduled", fields.scheduled),
-    ...dateField("due", fields.due),
-    ...dateField("completed", fields.completed),
-    ...(fields.depends === undefined ? {} : { depends: fields.depends }),
-    ...(fields.repeat === undefined ? {} : { repeat: fields.repeat }),
-    ...(fields.area === undefined ? {} : { area: fields.area }),
-    ...(fields.project === undefined ? {} : { project: fields.project })
-  })
 }
 
 const dateField = <Key extends "scheduled" | "due" | "completed">(

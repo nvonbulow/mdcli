@@ -2,18 +2,17 @@ import { Chunk, Context, Effect, Layer, String as Str } from "effect"
 import type * as Glob from "./Glob"
 import {
   ArchiveHeadingCheckAnalyzer,
-  CatalogDiagnosticsCheckAnalyzer,
   DumpInboxCheckAnalyzer,
   DuplicateHeadingCheckAnalyzer,
   LinkIntegrityCheckAnalyzer,
   TaskMetadataCheckAnalyzer,
-  TitleDriftCheckAnalyzer
+  TitleDriftCheckAnalyzer,
+  VaultDiagnosticsCheckAnalyzer
 } from "./CheckAnalyzers"
 import type { CheckAnalyzer } from "./CheckAnalyzers"
-import type { CatalogSnapshot } from "./CatalogModel"
-import { CatalogService } from "./CatalogService"
+import type { VaultHeadingRecord, VaultShape } from "./Vault"
 import { CheckContext, CheckFinding, CheckReport } from "./CheckModel"
-import type { CheckContextShape, CheckFile, CheckIndexes } from "./CheckModel"
+import type { CheckContextShape, CheckIndexes } from "./CheckModel"
 import { VaultService } from "./VaultService"
 import type { VaultIoError } from "./VaultErrors"
 import type { VaultScope } from "./VaultScope"
@@ -21,7 +20,7 @@ import type { VaultScope } from "./VaultScope"
 export type CheckServiceError = VaultIoError | Glob.GlobError
 const serviceRegistry = new WeakMap<
   CheckServiceShape,
-  { readonly snapshotForScope: SnapshotForScope; readonly analyzers: ReadonlyArray<CheckAnalyzer> }
+  { readonly scopedVaultForScope: ScopedVaultForScope; readonly analyzers: ReadonlyArray<CheckAnalyzer> }
 >()
 
 export type CheckServiceShape = {
@@ -29,23 +28,23 @@ export type CheckServiceShape = {
   readonly runFile: (scope: VaultScope, path: string) => Effect.Effect<CheckReport, CheckServiceError>
   readonly runFiles: (scope: VaultScope, paths: Chunk.Chunk<string>) => Effect.Effect<CheckReport, CheckServiceError>
 }
-type SnapshotForScope = (scope: VaultScope) => Effect.Effect<CatalogSnapshot, CheckServiceError>
+type ScopedVaultForScope = (scope: VaultScope) => Effect.Effect<VaultShape, CheckServiceError>
 
 export class CheckService extends Context.Service<CheckService, CheckServiceShape>()("@kb/vault/CheckService") {
-  static readonly layerNoDeps: Layer.Layer<CheckService, never, CatalogService | VaultService> = Layer.effect(
+  static readonly layerNoDeps: Layer.Layer<CheckService, never, VaultService> = Layer.effect(
     CheckService,
     Effect.gen(function* () {
-      const catalog = yield* CatalogService
-      const catalogDiagnostics = yield* CatalogDiagnosticsCheckAnalyzer
+      const vault = yield* VaultService
+      const vaultDiagnostics = yield* VaultDiagnosticsCheckAnalyzer
       const linkIntegrity = yield* LinkIntegrityCheckAnalyzer
       const duplicateHeading = yield* DuplicateHeadingCheckAnalyzer
       const titleDrift = yield* TitleDriftCheckAnalyzer
       const archiveHeading = yield* ArchiveHeadingCheckAnalyzer
       const dumpInbox = yield* DumpInboxCheckAnalyzer
       const taskMetadata = yield* TaskMetadataCheckAnalyzer
-      return makeWithSnapshot(
-        catalog.snapshot,
-        catalogDiagnostics,
+      return makeWithScopedVault(
+        vault.scoped,
+        vaultDiagnostics,
         linkIntegrity,
         duplicateHeading,
         titleDrift,
@@ -57,7 +56,7 @@ export class CheckService extends Context.Service<CheckService, CheckServiceShap
   ).pipe(
     Layer.provide(
       Layer.mergeAll(
-        CatalogDiagnosticsCheckAnalyzer.layer,
+        VaultDiagnosticsCheckAnalyzer.layer,
         LinkIntegrityCheckAnalyzer.layer,
         DuplicateHeadingCheckAnalyzer.layer,
         TitleDriftCheckAnalyzer.layer,
@@ -68,54 +67,49 @@ export class CheckService extends Context.Service<CheckService, CheckServiceShap
     )
   )
 
-  static readonly layer: Layer.Layer<CheckService, never, CatalogService | VaultService> = CheckService.layerNoDeps
+  static readonly layer: Layer.Layer<CheckService, never, VaultService> = CheckService.layerNoDeps
 }
 
 export const make = (...analyzers: ReadonlyArray<CheckAnalyzer>): CheckServiceShape =>
-  makeWithSnapshot(
+  makeWithScopedVault(
     (scope) =>
       Effect.gen(function* () {
-        const catalog = yield* CatalogService
-        return yield* catalog.snapshot(scope)
-      }) as Effect.Effect<CatalogSnapshot, CheckServiceError>,
+        const vault = yield* VaultService
+        return yield* vault.scoped(scope)
+      }) as Effect.Effect<VaultShape, CheckServiceError>,
     ...analyzers
   )
 
-const makeWithSnapshot = (
-  snapshotForScope: SnapshotForScope,
+const makeWithScopedVault = (
+  scopedVaultForScope: ScopedVaultForScope,
   ...analyzers: ReadonlyArray<CheckAnalyzer>
 ): CheckServiceShape => {
-  const runSelected = Effect.fn("CheckService.runSelected")(function* (
+  const runScope = Effect.fn("CheckService.runScope")(function* (
     scope: VaultScope,
-    selected: (file: CheckFile) => boolean
+    selected: (path: string) => boolean
   ) {
-    const snapshot = yield* snapshotForScope(scope)
-    const context = checkContext(scope, snapshot)
-    const selectedFiles = sortFiles(Chunk.filter(context.files, selected))
-    const findings = yield* Effect.forEach(selectedFiles, (file) =>
-      Effect.forEach(analyzers, (analyzer) => analyzer.analyze(file)).pipe(
-        Effect.map((chunks) => Chunk.flatten(Chunk.fromIterable(chunks)))
-      )
-    ).pipe(
+    const vault = yield* scopedVaultForScope(scope)
+    const context = yield* checkContext(scope, vault, selected)
+    const findings = yield* Effect.forEach(analyzers, (analyzer) => analyzer.analyze).pipe(
       Effect.map((chunks) => Chunk.flatten(Chunk.fromIterable(chunks))),
       Effect.provideService(CheckContext, context)
     )
 
-    return new CheckReport({ scope, findings: sortFindings(findings) })
+    return new CheckReport({ scope, vault, findings: sortFindings(findings) })
   })
 
   const service = CheckService.of({
-    run: (scope) => runSelected(scope, () => true),
+    run: (scope) => runScope(scope, () => true),
     runFile: (scope, path) => {
-      const normalizedPath = normalizePath(path)
-      return runSelected(scope, (file) => file.path === normalizedPath)
+      const selected = normalizePath(path)
+      return runScope(scope, (candidate) => candidate === selected)
     },
     runFiles: (scope, paths) => {
-      const selectedPaths = new Set(Chunk.toReadonlyArray(Chunk.map(paths, normalizePath)))
-      return runSelected(scope, (file) => selectedPaths.has(file.path))
+      const selected = new Set(Chunk.toReadonlyArray(Chunk.map(paths, normalizePath)))
+      return runScope(scope, (candidate) => selected.has(candidate))
     }
   })
-  serviceRegistry.set(service, { snapshotForScope, analyzers })
+  serviceRegistry.set(service, { scopedVaultForScope, analyzers })
   return service
 }
 
@@ -125,11 +119,11 @@ export const addCheck =
     const registered = serviceRegistry.get(self)
     return registered === undefined
       ? make(checkImplementation)
-      : makeWithSnapshot(registered.snapshotForScope, ...registered.analyzers, checkImplementation)
+      : makeWithScopedVault(registered.scopedVaultForScope, ...registered.analyzers, checkImplementation)
   }
 
 export const all = (
-  catalogDiagnostics: CheckAnalyzer,
+  vaultDiagnostics: CheckAnalyzer,
   linkIntegrity: CheckAnalyzer,
   duplicateHeading: CheckAnalyzer,
   titleDrift: CheckAnalyzer,
@@ -137,7 +131,7 @@ export const all = (
   dumpInbox: CheckAnalyzer,
   taskMetadata: CheckAnalyzer
 ): CheckServiceShape =>
-  make(catalogDiagnostics, linkIntegrity, duplicateHeading, titleDrift, archiveHeading, dumpInbox, taskMetadata)
+  make(vaultDiagnostics, linkIntegrity, duplicateHeading, titleDrift, archiveHeading, dumpInbox, taskMetadata)
 
 export const linksOnly = (linkIntegrity: CheckAnalyzer): CheckServiceShape => make(linkIntegrity)
 
@@ -151,25 +145,25 @@ export const tasksOnly = (taskMetadata: CheckAnalyzer): CheckServiceShape => mak
 
 export const dumpOnly = (dumpInbox: CheckAnalyzer): CheckServiceShape => make(dumpInbox)
 
-export const layerAll: Layer.Layer<CheckService, never, CatalogService | VaultService> = CheckService.layer
+export const layerAll: Layer.Layer<CheckService, never, VaultService> = CheckService.layer
 
-export const layerLinksOnly: Layer.Layer<CheckService, never, CatalogService> = Layer.effect(
+export const layerLinksOnly: Layer.Layer<CheckService, never, VaultService> = Layer.effect(
   CheckService,
   Effect.gen(function* () {
-    const catalog = yield* CatalogService
+    const vault = yield* VaultService
     const linkIntegrity = yield* LinkIntegrityCheckAnalyzer
-    return makeWithSnapshot(catalog.snapshot, linkIntegrity)
+    return makeWithScopedVault(vault.scoped, linkIntegrity)
   })
 ).pipe(Layer.provide(LinkIntegrityCheckAnalyzer.layer))
 
-export const layerHeadingsBundle: Layer.Layer<CheckService, never, CatalogService> = Layer.effect(
+export const layerHeadingsBundle: Layer.Layer<CheckService, never, VaultService> = Layer.effect(
   CheckService,
   Effect.gen(function* () {
-    const catalog = yield* CatalogService
+    const vault = yield* VaultService
     const duplicateHeading = yield* DuplicateHeadingCheckAnalyzer
     const titleDrift = yield* TitleDriftCheckAnalyzer
     const archiveHeading = yield* ArchiveHeadingCheckAnalyzer
-    return makeWithSnapshot(catalog.snapshot, duplicateHeading, titleDrift, archiveHeading)
+    return makeWithScopedVault(vault.scoped, duplicateHeading, titleDrift, archiveHeading)
   })
 ).pipe(
   Layer.provide(
@@ -181,93 +175,78 @@ export const layerHeadingsBundle: Layer.Layer<CheckService, never, CatalogServic
   )
 )
 
-export const layerTasksOnly: Layer.Layer<CheckService, never, CatalogService> = Layer.effect(
+export const layerTasksOnly: Layer.Layer<CheckService, never, VaultService> = Layer.effect(
   CheckService,
   Effect.gen(function* () {
-    const catalog = yield* CatalogService
+    const vault = yield* VaultService
     const taskMetadata = yield* TaskMetadataCheckAnalyzer
-    return makeWithSnapshot(catalog.snapshot, taskMetadata)
+    return makeWithScopedVault(vault.scoped, taskMetadata)
   })
 ).pipe(Layer.provide(TaskMetadataCheckAnalyzer.layer))
 
-export const layerDumpOnly: Layer.Layer<CheckService, never, CatalogService | VaultService> = Layer.effect(
+export const layerDumpOnly: Layer.Layer<CheckService, never, VaultService> = Layer.effect(
   CheckService,
   Effect.gen(function* () {
-    const catalog = yield* CatalogService
+    const vault = yield* VaultService
     const dumpInbox = yield* DumpInboxCheckAnalyzer
-    return makeWithSnapshot(catalog.snapshot, dumpInbox)
+    return makeWithScopedVault(vault.scoped, dumpInbox)
   })
 ).pipe(Layer.provide(DumpInboxCheckAnalyzer.layer))
 
-const checkContext = (scope: VaultScope, snapshot: CatalogSnapshot): CheckContextShape =>
-  CheckContext.of({
-    scope,
-    snapshot,
-    files: filesFromSnapshot(snapshot),
-    indexes: indexesFromSnapshot(snapshot)
+const checkContext = (
+  scope: VaultScope,
+  vault: VaultShape,
+  selected: (path: string) => boolean
+): Effect.Effect<CheckContextShape> =>
+  Effect.gen(function* () {
+    return CheckContext.of({
+      scope,
+      vault,
+      selected,
+      indexes: yield* indexesFromVault(vault)
+    })
   })
 
-const filesFromSnapshot = (snapshot: CatalogSnapshot): Chunk.Chunk<CheckFile> => {
-  const noteFiles = Chunk.map(snapshot.notes, (note) => ({
-    path: note.path,
-    note,
-    frontmatter: note.frontmatter,
-    headings: note.headings,
-    links: note.links,
-    tags: note.tags,
-    listItems: note.listItems,
-    tasks: note.tasks,
-    fencedBlocks: note.fencedBlocks,
-    diagnostics: Chunk.filter(snapshot.diagnostics, (diagnostic) => diagnostic.path === note.path)
-  }))
+const indexesFromVault = (vault: VaultShape): Effect.Effect<CheckIndexes> =>
+  Effect.gen(function* () {
+    const notes = yield* vault.notes()
+    const headings = yield* vault.headings()
+    const notesByKey = new Map<string, Chunk.Chunk<string>>()
+    const basenameByKey = new Map<string, Chunk.Chunk<string>>()
+    const h1ByKey = new Map<string, Chunk.Chunk<string>>()
+    const activeH1ByKey = new Map<string, Chunk.Chunk<string>>()
+    const archiveH1ByKey = new Map<string, Chunk.Chunk<string>>()
 
-  const notePaths = new Set(Chunk.toReadonlyArray(Chunk.map(snapshot.notes, (note) => note.path)))
-  const diagnosticFiles = Chunk.map(
-    Chunk.filter(snapshot.diagnostics, (diagnostic) => !notePaths.has(diagnostic.path)),
-    (diagnostic) => ({
-      path: diagnostic.path,
-      frontmatter: Chunk.empty(),
-      headings: Chunk.empty(),
-      links: Chunk.empty(),
-      tags: Chunk.empty(),
-      listItems: Chunk.empty(),
-      tasks: Chunk.empty(),
-      fencedBlocks: Chunk.empty(),
-      diagnostics: Chunk.of(diagnostic)
-    })
-  )
-
-  return Chunk.appendAll(noteFiles, diagnosticFiles)
-}
-
-const indexesFromSnapshot = (snapshot: CatalogSnapshot): CheckIndexes => {
-  const notesByKey = new Map<string, Chunk.Chunk<string>>()
-  const basenameByKey = new Map<string, Chunk.Chunk<string>>()
-  const h1ByKey = new Map<string, Chunk.Chunk<string>>()
-  const activeH1ByKey = new Map<string, Chunk.Chunk<string>>()
-  const archiveH1ByKey = new Map<string, Chunk.Chunk<string>>()
-
-  for (const note of snapshot.notes) {
-    appendIndex(notesByKey, normalizeKey(note.path), note.path)
-    appendIndex(basenameByKey, normalizeKey(basename(note.path)), note.path)
-  }
-
-  for (const heading of snapshot.headings) {
-    if (heading.depth !== 1) {
-      continue
+    for (const note of notes) {
+      appendIndex(notesByKey, normalizeKey(note.path), note.path)
+      appendIndex(basenameByKey, normalizeKey(basename(note.path)), note.path)
     }
-    const key = normalizeKey(heading.text)
-    appendIndex(h1ByKey, key, heading.path)
-    appendIndex(isArchivePath(heading.path) ? archiveH1ByKey : activeH1ByKey, key, heading.path)
-  }
 
-  return {
-    notesByKey: sortIndex(notesByKey),
-    basenameByKey: sortIndex(basenameByKey),
-    h1ByKey: sortIndex(h1ByKey),
-    activeH1ByKey: sortIndex(activeH1ByKey),
-    archiveH1ByKey: sortIndex(archiveH1ByKey)
+    for (const heading of headings) {
+      appendHeadingIndexes(heading, h1ByKey, activeH1ByKey, archiveH1ByKey)
+    }
+
+    return {
+      notesByKey: sortIndex(notesByKey),
+      basenameByKey: sortIndex(basenameByKey),
+      h1ByKey: sortIndex(h1ByKey),
+      activeH1ByKey: sortIndex(activeH1ByKey),
+      archiveH1ByKey: sortIndex(archiveH1ByKey)
+    }
+  })
+
+const appendHeadingIndexes = (
+  heading: VaultHeadingRecord,
+  h1ByKey: Map<string, Chunk.Chunk<string>>,
+  activeH1ByKey: Map<string, Chunk.Chunk<string>>,
+  archiveH1ByKey: Map<string, Chunk.Chunk<string>>
+): void => {
+  if (heading.depth !== 1) {
+    return
   }
+  const key = normalizeKey(heading.text)
+  appendIndex(h1ByKey, key, heading.path)
+  appendIndex(isArchivePath(heading.path) ? archiveH1ByKey : activeH1ByKey, key, heading.path)
 }
 
 const appendIndex = (index: Map<string, Chunk.Chunk<string>>, key: string, path: string): void => {
@@ -286,17 +265,13 @@ const sortIndex = (index: Map<string, Chunk.Chunk<string>>): ReadonlyMap<string,
   }
   return sorted
 }
-const sortFiles = (files: Chunk.Chunk<CheckFile>): Chunk.Chunk<CheckFile> =>
-  Chunk.fromIterable(
-    Array.from(Chunk.toReadonlyArray(files)).sort((left, right) => compareString(left.path, right.path))
-  )
 
 const sortFindings = (findings: Chunk.Chunk<CheckFinding>): Chunk.Chunk<CheckFinding> =>
   Chunk.fromIterable(Array.from(Chunk.toReadonlyArray(findings)).sort(compareFinding))
 
 const compareFinding = (left: CheckFinding, right: CheckFinding): number =>
   compareString(left.path, right.path) ||
-  compareOptionalNumber(left.lineNumber, right.lineNumber) ||
+  compareOptionalNumber(left.position?.start.line, right.position?.start.line) ||
   compareString(left.category, right.category) ||
   compareString(left.severity, right.severity) ||
   compareString(left.message, right.message)

@@ -87,7 +87,7 @@ const runCheckWithFlags = Effect.fn("CheckCommand.runCheckWithFlags")(function* 
     ? yield* checker.run(scope)
     : yield* checker.runFiles(scope, selectedFiles)
   const findings = Chunk.toReadonlyArray(report.findings)
-  const output = renderReport(rootFlags.format, label, findings)
+  const output = renderReport(rootFlags.format, label, report)
   yield* Console.log(output)
 
   const shouldFail = findings.some(
@@ -100,14 +100,11 @@ const runCheckWithFlags = Effect.fn("CheckCommand.runCheckWithFlags")(function* 
   }
 })
 
-const renderReport = (
-  format: OutputFormat,
-  label: string,
-  findings: ReadonlyArray<CheckModel.CheckFinding>
-): string => {
+const renderReport = (format: OutputFormat, label: string, report: CheckModel.CheckReport): string => {
+  const findings = Chunk.toReadonlyArray(report.findings)
   switch (format) {
     case "pretty":
-      return renderPretty(label, findings)
+      return renderPretty(label, report, findings)
     case "markdown":
       return renderMarkdown(label, findings)
     case "json":
@@ -115,12 +112,14 @@ const renderReport = (
   }
 }
 
-const renderPretty = (label: string, findings: ReadonlyArray<CheckModel.CheckFinding>): string =>
+const renderPretty = (
+  label: string,
+  report: CheckModel.CheckReport,
+  findings: ReadonlyArray<CheckModel.CheckFinding>
+): string =>
   findings.length === 0
     ? `Checked ${label}: OK`
-    : findings
-        .map((finding) => `${finding.severity} ${finding.category} ${location(finding)} ${finding.message}`)
-        .join("\n")
+    : findings.map((finding) => renderPrettyFinding(report, finding)).join("\n")
 
 const renderMarkdown = (label: string, findings: ReadonlyArray<CheckModel.CheckFinding>): string => {
   if (findings.length === 0) {
@@ -149,15 +148,45 @@ const jsonFinding = (finding: CheckModel.CheckFinding): Readonly<Record<string, 
   severity: finding.severity,
   category: finding.category,
   path: finding.path,
-  lineNumber: finding.lineNumber ?? null,
+  position: finding.position ?? null,
   message: finding.message,
   suggestedFix: finding.suggestedFix ?? null,
   relatedPaths: finding.relatedPaths === undefined ? [] : Chunk.toReadonlyArray(finding.relatedPaths),
   triggerPath: finding.triggerPath ?? null
 })
 
+const renderPrettyFinding = (report: CheckModel.CheckReport, finding: CheckModel.CheckFinding): string => {
+  const source = CheckModel.sourceLine(report, finding)
+  const header = `${severityColor(finding.severity)}${finding.severity}${reset} ${dim(finding.category)} ${location(finding)} ${finding.message}`
+  const suggestion = finding.suggestedFix === undefined ? "" : `\n     = suggestion: ${finding.suggestedFix}`
+  if (source === undefined || finding.position === undefined) {
+    return `${header}${suggestion}`
+  }
+  const line = finding.position.start.line
+  const gutter = String(line).padStart(4, " ")
+  const underline = underlineFor(source, finding.position)
+  return `${header}\n\n${gutter} | ${source}\n     | ${severityColor(finding.severity)}${underline}${reset}${suggestion}`
+}
+
 const categories = (findings: ReadonlyArray<CheckModel.CheckFinding>): ReadonlyArray<CheckModel.CheckCategory> =>
   Array.from(new Set(findings.map((finding) => finding.category)))
 
-const location = (finding: CheckModel.CheckFinding): string =>
-  finding.lineNumber === undefined ? finding.path : `${finding.path}:${finding.lineNumber}`
+const location = (finding: CheckModel.CheckFinding): string => {
+  const start = finding.position?.start
+  return start === undefined ? finding.path : `${finding.path}:${start.line}:${start.column}`
+}
+
+const underlineFor = (source: string, position: CheckModel.CheckFinding["position"]): string => {
+  if (position === undefined) {
+    return ""
+  }
+  const startColumn = Math.max(1, position.start.column)
+  const endColumn =
+    position.end.line === position.start.line ? Math.max(startColumn + 1, position.end.column) : source.length + 1
+  return " ".repeat(startColumn - 1) + "^".repeat(Math.max(1, endColumn - startColumn))
+}
+
+const severityColor = (severity: CheckModel.CheckSeverity): string =>
+  severity === "error" ? "\u001b[31m" : "\u001b[33m"
+const reset = "\u001b[0m"
+const dim = (value: string): string => `\u001b[2m${value}${reset}`

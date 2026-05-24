@@ -125,11 +125,11 @@ describe("VaultService", () => {
       assert.strictEqual(first.path, "Inbox.md")
       assert.strictEqual(first.contents, "# Inbox\n- [ ] Old task #task")
       assert.deepStrictEqual(
-        Chunk.toReadonlyArray(Markdown.getTasks(first)).map((task) => task.text),
+        Chunk.toReadonlyArray(Markdown.getTasks(first)).map((task) => task.data?.obsidianTask?.text),
         ["Old task #task"]
       )
       assert.deepStrictEqual(
-        Chunk.toReadonlyArray(Markdown.getTasks(first)).map((task) => task.done),
+        Chunk.toReadonlyArray(Markdown.getTasks(first)).map((task) => task.data?.obsidianTask?.done),
         [false]
       )
 
@@ -139,11 +139,11 @@ describe("VaultService", () => {
       assert.strictEqual(second.path, "Inbox.md")
       assert.strictEqual(second.contents, "# Inbox\n- [x] New task #task")
       assert.deepStrictEqual(
-        Chunk.toReadonlyArray(Markdown.getTasks(second)).map((task) => task.text),
+        Chunk.toReadonlyArray(Markdown.getTasks(second)).map((task) => task.data?.obsidianTask?.text),
         ["New task #task"]
       )
       assert.deepStrictEqual(
-        Chunk.toReadonlyArray(Markdown.getTasks(second)).map((task) => task.done),
+        Chunk.toReadonlyArray(Markdown.getTasks(second)).map((task) => task.data?.obsidianTask?.done),
         [true]
       )
     }).pipe(Effect.provide(vaultLayer(files)))

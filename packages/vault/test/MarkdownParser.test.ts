@@ -59,10 +59,9 @@ describe("MarkdownParser", () => {
       const frontmatter = Chunk.toReadonlyArray(Markdown.getFrontmatter(file))
 
       assert.strictEqual(frontmatter.length, 1)
-      assert.strictEqual(frontmatter[0]?.language, "yaml")
       assert.strictEqual(frontmatter[0]?.value, "title: Vault\nstatus: active")
-      assert.strictEqual(frontmatter[0]?.span?.start, 0)
-      assert.ok((frontmatter[0]?.span?.end ?? 0) > frontmatter[0]!.value.length)
+      assert.strictEqual(frontmatter[0]?.position?.start.offset, 0)
+      assert.ok((frontmatter[0]?.position?.end.offset ?? 0) > frontmatter[0]!.value.length)
     }).pipe(Effect.provide(parserLayer))
   )
 
@@ -74,12 +73,12 @@ describe("MarkdownParser", () => {
       const tags = Chunk.toReadonlyArray(Markdown.getTags(file))
       const listItems = Chunk.toReadonlyArray(Markdown.getListItems(file))
       const tasks = Chunk.toReadonlyArray(Markdown.getTasks(file))
-      const fields = Chunk.toReadonlyArray(Markdown.getInlineFields(file))
+      const fields = tasks.flatMap((task) => Array.from(task.data?.obsidianTask?.inlineFields ?? []))
       const blocks = Chunk.toReadonlyArray(Markdown.getFencedBlocks(file))
 
       assert.strictEqual(headings.length, 1)
       assert.strictEqual(headings[0]?.depth, 1)
-      assert.strictEqual(headings[0]?.text, "Project Home page #top")
+      assert.strictEqual(Markdown.headingText(headings[0]!), "Project Home page #top")
 
       assert.strictEqual(wikilinks.length, 2)
       assert.strictEqual(wikilinks[0]?.target, "Home")
@@ -95,24 +94,24 @@ describe("MarkdownParser", () => {
 
       assert.strictEqual(listItems.length, 3)
       assert.strictEqual(listItems[0]?.checked, false)
-      assert.strictEqual(listItems[0]?.text, "Task body #task 2026-05-24 TaskNote")
+      assert.strictEqual(Markdown.listItemText(listItems[0]!), "Task body #task 2026-05-24 TaskNote")
       assert.strictEqual(listItems[1]?.checked, true)
-      assert.strictEqual(listItems[2]?.checked, undefined)
-      assert.strictEqual(listItems[2]?.text, "Plain list item #plain")
+      assert.strictEqual(listItems[2]?.checked, null)
+      assert.strictEqual(Markdown.listItemText(listItems[2]!), "Plain list item #plain")
 
       assert.strictEqual(tasks.length, 2)
-      const firstTaskFields = Chunk.toReadonlyArray(tasks[0]!.fields)
-      const firstTaskTags = Chunk.toReadonlyArray(tasks[0]!.tags)
-      const secondTaskFields = Chunk.toReadonlyArray(tasks[1]!.fields)
-      const secondTaskTags = Chunk.toReadonlyArray(tasks[1]!.tags)
-      assert.strictEqual(tasks[0]?.done, false)
+      const firstTaskFields = Array.from(tasks[0]!.data?.obsidianTask?.inlineFields ?? [])
+      const firstTaskTags = Array.from(tasks[0]!.data?.obsidianTask?.tags ?? [])
+      const secondTaskFields = Array.from(tasks[1]!.data?.obsidianTask?.inlineFields ?? [])
+      const secondTaskTags = Array.from(tasks[1]!.data?.obsidianTask?.tags ?? [])
+      assert.strictEqual(tasks[0]?.data?.obsidianTask?.done, false)
       assert.strictEqual(firstTaskFields[0]?.key, "due")
       assert.strictEqual(firstTaskFields[0]?.value, "2026-05-24")
       assert.deepStrictEqual(
         firstTaskTags.map((tag) => tag.value),
         ["#task"]
       )
-      assert.strictEqual(tasks[1]?.done, true)
+      assert.strictEqual(tasks[1]?.data?.obsidianTask?.done, true)
       assert.strictEqual(secondTaskFields[0]?.key, "completed")
       assert.deepStrictEqual(
         secondTaskTags.map((tag) => tag.value),
@@ -122,16 +121,15 @@ describe("MarkdownParser", () => {
       assert.deepStrictEqual(
         fields.map((field) => [field.key, field.value]),
         [
-          ["field", "value"],
           ["due", "2026-05-24"],
           ["completed", "2026-05-24"]
         ]
       )
 
       assert.strictEqual(blocks.length, 2)
-      assert.strictEqual(blocks[0]?.language, "dataview")
+      assert.strictEqual(Markdown.fencedBlockLanguage(blocks[0]!), "dataview")
       assert.strictEqual(blocks[0]?.value, "TABLE file.name")
-      assert.strictEqual(blocks[1]?.language, "text")
+      assert.strictEqual(Markdown.fencedBlockLanguage(blocks[1]!), "text")
       assert.strictEqual(blocks[1]?.value, "#ignored-code")
     }).pipe(Effect.provide(parserLayer))
   )

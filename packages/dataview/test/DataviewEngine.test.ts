@@ -1,14 +1,14 @@
 import { assert, describe, it } from "@effect/vitest"
 import {
   CalendarService,
-  CatalogModel,
-  CatalogService,
+  VaultService,
+  MarkdownModel,
   ParsedTask,
   TaskSource,
   type IsoDate,
   type VaultScope
 } from "@kb/vault"
-import { Chunk, Effect, Layer } from "effect"
+import { Chunk, Effect, Layer, Trie } from "effect"
 import {
   DataviewEvaluator,
   DataviewExpression,
@@ -41,41 +41,52 @@ const record = (
 
 const parserEvaluatorLayer = Layer.mergeAll(DataviewParser.layerNoDeps, DataviewEvaluator.layerNoDeps)
 
-const catalogTaskRecord = (task: ParsedTask): CatalogModel.CatalogTaskRecord => {
-  const separatorIndex = task.source.path.lastIndexOf("/")
-  const folder = separatorIndex === -1 ? "" : task.source.path.slice(0, separatorIndex)
-  const fileName = separatorIndex === -1 ? task.source.path : task.source.path.slice(separatorIndex + 1)
-  const title = fileName.endsWith(".md") ? fileName.slice(0, -3) : fileName
-
-  return {
-    path: task.source.path,
-    folder,
-    title,
-    task,
-    done: task.done,
-    text: task.text,
-    lineNumber: task.source.lineNumber,
-    fields: task.fields,
-    unknownFields: task.unknownFields,
-    tags: Chunk.fromIterable(task.tags)
-  }
-}
+const vaultTaskRecord = (task: ParsedTask) => ({
+  path: task.source.path,
+  file: new MarkdownModel.MarkdownFile({ path: task.source.path, contents: "", mdast: { type: "root", children: [] } }),
+  node: {
+    type: "listItem",
+    children: [],
+    data: { obsidianTask: { done: task.done, text: task.text, rawText: task.text, tags: [], inlineFields: [] } }
+  } as never,
+  task,
+  done: task.done,
+  text: task.text,
+  fields: task.fields,
+  unknownFields: task.unknownFields,
+  tags: Chunk.fromIterable(task.tags)
+})
 
 const scopeKey = (scope: VaultScope): string => {
   const pattern = Chunk.toReadonlyArray(scope.patterns)[0] ?? ""
   return pattern.endsWith("/**/*.md") ? pattern.slice(0, -"/**/*.md".length) : pattern
 }
 
-const catalogLayer = (tasksBySource: Readonly<Record<string, ReadonlyArray<ParsedTask>>>) =>
+const vaultLayer = (tasksBySource: Readonly<Record<string, ReadonlyArray<ParsedTask>>>) =>
   Layer.succeed(
-    CatalogService,
-    CatalogService.of({
-      snapshot: () => Effect.die(new Error("snapshot should not be used by dataview tests")),
-      listNotes: () => Effect.die(new Error("listNotes should not be used by dataview tests")),
-      listTasks: (scope) =>
-        Effect.succeed(Chunk.fromIterable((tasksBySource[scopeKey(scope)] ?? []).map(catalogTaskRecord))),
-      listTags: () => Effect.die(new Error("listTags should not be used by dataview tests")),
-      search: () => Effect.die(new Error("search should not be used by dataview tests"))
+    VaultService,
+    VaultService.of({
+      readText: () => Effect.succeed(""),
+      writeText: () => Effect.void,
+      readMarkdown: () => Effect.die(new Error("readMarkdown should not be used by dataview tests")),
+      readMarkdownTree: () => Effect.die(new Error("readMarkdownTree should not be used by dataview tests")),
+      scoped: (scope) =>
+        Effect.succeed({
+          scope,
+          tree: { root: "", files: Trie.empty() },
+          notes: () => Effect.succeed(Chunk.empty()),
+          frontmatter: () => Effect.succeed(Chunk.empty()),
+          headings: () => Effect.succeed(Chunk.empty()),
+          links: () => Effect.succeed(Chunk.empty()),
+          tags: () => Effect.succeed(Chunk.empty()),
+          listItems: () => Effect.succeed(Chunk.empty()),
+          tasks: () => Effect.succeed(Chunk.fromIterable((tasksBySource[scopeKey(scope)] ?? []).map(vaultTaskRecord))),
+          fencedBlocks: () => Effect.succeed(Chunk.empty()),
+          diagnostics: () => Effect.succeed(Chunk.empty()),
+          search: () => Effect.succeed(Chunk.empty()),
+          sourceLine: () => undefined,
+          sourceExcerpt: () => undefined
+        })
     })
   )
 
@@ -92,7 +103,7 @@ const programLayer = (
         DataviewFunctionRegistry.layerNoDeps
       )
     ),
-    Layer.provide(Layer.mergeAll(catalogLayer(tasksBySource), CalendarService.layerTest(today)))
+    Layer.provide(Layer.mergeAll(vaultLayer(tasksBySource), CalendarService.layerTest(today)))
   )
 
 describe("DataviewParser", () => {
@@ -270,7 +281,7 @@ SORT due ASC, score DESC`
 })
 
 describe("DataviewRecordSource and DataviewProgram", () => {
-  it.effect("read records only from the query source through CatalogService", () =>
+  it.effect("read records only from the query source through VaultService", () =>
     Effect.gen(function* () {
       const parser = yield* DataviewParser
       const recordSource = yield* DataviewRecordSource
@@ -289,7 +300,7 @@ FROM "Inbox"`)
     }).pipe(
       Effect.provide(Layer.mergeAll(DataviewParser.layerNoDeps, DataviewRecordSource.layerNoDeps)),
       Effect.provide(
-        catalogLayer({
+        vaultLayer({
           Inbox: [parsed("inbox task", 4, { source: source(4, "Inbox.md") })],
           Projects: [parsed("project task", 5, { source: source(5, "Projects.md") })]
         })
@@ -363,7 +374,7 @@ SORT scheduled ASC`)
     }).pipe(
       Effect.provide(DataviewRecordSource.layerNoDeps),
       Effect.provide(
-        catalogLayer({
+        vaultLayer({
           Inbox: [parsed("unused", 1)]
         })
       )

@@ -1,9 +1,13 @@
 export type {
   ObsidianInlineField,
+  ObsidianListItem,
   ObsidianInlineFieldData,
   ObsidianNodeData,
   ObsidianPhrasingContent,
   ObsidianPhrasingContentMap,
+  ObsidianTag,
+  ObsidianTagData,
+  ObsidianTaskData,
   ObsidianWikilink,
   ObsidianWikilinkData,
   SourceSpan

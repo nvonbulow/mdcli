@@ -1,8 +1,13 @@
-import { stripInlineFields } from "@kb/remark-obsidian"
+import {
+  stripInlineFields,
+  type ObsidianInlineField,
+  type ObsidianListItem,
+  type ObsidianTag
+} from "@kb/remark-obsidian"
 import { String as Str } from "effect"
 import * as Chunk from "effect/Chunk"
 import { Markdown } from "./markdown/Markdown"
-import type { MarkdownFile, MarkdownInlineField, MarkdownTask } from "./markdown/MarkdownModel"
+import type { MarkdownFile, SourcePosition } from "./markdown/MarkdownModel"
 import { ParsedTask, TaskSource, type IsoDate } from "./TaskModel"
 
 export const parsedTasksFromMarkdownFile = (file: MarkdownFile): Chunk.Chunk<ParsedTask> =>
@@ -10,12 +15,11 @@ export const parsedTasksFromMarkdownFile = (file: MarkdownFile): Chunk.Chunk<Par
 
 const taskTag = "#task"
 const taskTextTagPattern = /#[A-Za-z0-9/_-]+\b/g
-const taskBodyPattern = /^\s*[-*+]\s+\[[ xX]\]\s*/
 const whitespacePattern = /\s{2,}/g
 const knownFields = new Set(["scheduled", "due", "completed", "depends", "repeat", "area", "project"])
 
 const parsedTasksFromMarkdownTasks = (
-  tasks: Iterable<MarkdownTask>,
+  tasks: Iterable<ObsidianListItem>,
   markdown: string,
   sourcePath: string
 ): Chunk.Chunk<ParsedTask> => {
@@ -37,14 +41,12 @@ const markdownFilePath = (file: MarkdownFile): string => {
   return ""
 }
 
-const taskTags = (task: MarkdownTask, markdown: string): ReadonlyArray<string> => {
+const taskTags = (task: ObsidianListItem, markdown: string): ReadonlyArray<string> => {
   const lineRange = taskFirstSourceLineRange(task, markdown)
   const tags: Array<string> = []
-  for (const tag of task.tags) {
-    if (
-      lineRange !== undefined &&
-      (tag.span === undefined || tag.span.start < lineRange.start || tag.span.end > lineRange.end)
-    ) {
+  for (const tag of task.data?.obsidianTask?.tags ?? []) {
+    const span = positionSpan(tag.position)
+    if (lineRange !== undefined && (span === undefined || span.start < lineRange.start || span.end > lineRange.end)) {
       continue
     }
     if (!tags.includes(tag.value)) {
@@ -55,19 +57,23 @@ const taskTags = (task: MarkdownTask, markdown: string): ReadonlyArray<string> =
 }
 
 const parsedTaskFromMarkdown = (
-  task: MarkdownTask,
+  task: ObsidianListItem,
   markdown: string,
   path: string,
   tags: ReadonlyArray<string>
 ): ParsedTask => {
-  const fields = taskFields(task.fields, taskFirstSourceLineRange(task, markdown))
+  const fields = taskFields(task.data?.obsidianTask?.inlineFields ?? [], taskFirstSourceLineRange(task, markdown))
   const unknownFields = taskUnknownFields(fields)
   const text = taskText(task, markdown)
 
   return new ParsedTask({
-    done: task.done,
+    done: task.data?.obsidianTask?.done ?? task.checked === true,
     text,
-    source: new TaskSource({ path, lineNumber: offsetLineNumber(markdown, task.span?.start ?? 0) }),
+    source: new TaskSource({
+      path,
+      lineNumber: task.position?.start.line ?? offsetLineNumber(markdown, task.position?.start.offset ?? 0),
+      ...optionalPosition(task.position)
+    }),
     fields,
     unknownFields,
     tags,
@@ -82,12 +88,13 @@ const parsedTaskFromMarkdown = (
 }
 
 const taskFields = (
-  inlineFields: Iterable<MarkdownInlineField>,
+  inlineFields: Iterable<ObsidianInlineField>,
   lineRange: { readonly start: number; readonly end: number } | undefined
 ): Readonly<Record<string, string>> => {
   const fields: Record<string, string> = {}
   for (const field of inlineFields) {
-    if (lineRange !== undefined && (field.span.start < lineRange.start || field.span.end > lineRange.end)) {
+    const span = positionSpan(field.position)
+    if (lineRange !== undefined && (span === undefined || span.start < lineRange.start || span.end > lineRange.end)) {
       continue
     }
     fields[field.key] = field.value
@@ -105,13 +112,19 @@ const taskUnknownFields = (fields: Readonly<Record<string, string>>): Readonly<R
   return unknownFields
 }
 
-const taskText = (task: MarkdownTask, markdown: string): string => {
+const taskText = (task: ObsidianListItem, markdown: string): string => {
   const sourceLine = taskFirstSourceLine(task, markdown)
-  const body = sourceLine === undefined ? task.text : sourceLine.replace(taskBodyPattern, "")
+  const body =
+    sourceLine === undefined ? (task.data?.obsidianTask?.text ?? Markdown.listItemText(task)) : taskLineBody(sourceLine)
   return Str.trim(stripInlineFields(body).replace(taskTextTagPattern, "").replace(whitespacePattern, " "))
 }
 
-const taskFirstSourceLine = (task: MarkdownTask, markdown: string): string | undefined => {
+const taskLineBody = (sourceLine: string): string => {
+  const marker = sourceLine.indexOf("]")
+  return marker === -1 ? sourceLine : sourceLine.slice(marker + 1)
+}
+
+const taskFirstSourceLine = (task: ObsidianListItem, markdown: string): string | undefined => {
   const lineRange = taskFirstSourceLineRange(task, markdown)
   if (lineRange === undefined) {
     return undefined
@@ -120,10 +133,10 @@ const taskFirstSourceLine = (task: MarkdownTask, markdown: string): string | und
 }
 
 const taskFirstSourceLineRange = (
-  task: MarkdownTask,
+  task: ObsidianListItem,
   markdown: string
 ): { readonly start: number; readonly end: number } | undefined => {
-  const start = task.span?.start
+  const start = task.position?.start.offset
   if (start === undefined) {
     return undefined
   }
@@ -135,6 +148,14 @@ const taskFirstSourceLineRange = (
   return { start, end: lineEnd }
 }
 
+const positionSpan = (
+  position: SourcePosition | ObsidianTag["position"] | undefined
+): { readonly start: number; readonly end: number } | undefined => {
+  const start = position?.start.offset
+  const end = position?.end.offset
+  return typeof start === "number" && typeof end === "number" ? { start, end } : undefined
+}
+
 const offsetLineNumber = (markdown: string, offset: number): number => {
   let lineNumber = 1
   const end = Math.min(offset, markdown.length)
@@ -144,6 +165,13 @@ const offsetLineNumber = (markdown: string, offset: number): number => {
     }
   }
   return lineNumber
+}
+
+const optionalPosition = <P>(position: P | undefined): { readonly position?: P } => {
+  if (position === undefined) {
+    return {}
+  }
+  return { position }
 }
 
 const isIsoDate = (value: string): value is IsoDate => {

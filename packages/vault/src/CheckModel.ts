@@ -1,16 +1,6 @@
 import { Chunk, Context, Data } from "effect"
-import type {
-  CatalogDiagnostic,
-  CatalogFencedBlockRecord,
-  CatalogFrontmatterRecord,
-  CatalogHeadingRecord,
-  CatalogLinkRecord,
-  CatalogListItemRecord,
-  CatalogNoteRecord,
-  CatalogSnapshot,
-  CatalogTagRecord,
-  CatalogTaskRecord
-} from "./CatalogModel"
+import type { SourcePosition } from "./markdown/MarkdownModel"
+import type { VaultShape } from "./Vault"
 import type { VaultScope } from "./VaultScope"
 
 export type CheckSeverity = "error" | "warning"
@@ -21,30 +11,21 @@ export class CheckFinding extends Data.Class<{
   readonly category: CheckCategory
   readonly severity: CheckSeverity
   readonly path: string
-  readonly lineNumber?: number
+  readonly position?: SourcePosition | undefined
   readonly message: string
-  readonly suggestedFix?: string
-  readonly relatedPaths?: Chunk.Chunk<string>
-  readonly triggerPath?: string
+  readonly suggestedFix?: string | undefined
+  readonly relatedPaths?: Chunk.Chunk<string> | undefined
+  readonly triggerPath?: string | undefined
 }> {}
 
 export class CheckReport extends Data.Class<{
   readonly scope: VaultScope
+  readonly vault: VaultShape
   readonly findings: Chunk.Chunk<CheckFinding>
 }> {}
 
-export type CheckFile = {
-  readonly path: string
-  readonly note?: CatalogNoteRecord
-  readonly frontmatter: Chunk.Chunk<CatalogFrontmatterRecord>
-  readonly headings: Chunk.Chunk<CatalogHeadingRecord>
-  readonly links: Chunk.Chunk<CatalogLinkRecord>
-  readonly tags: Chunk.Chunk<CatalogTagRecord>
-  readonly listItems: Chunk.Chunk<CatalogListItemRecord>
-  readonly tasks: Chunk.Chunk<CatalogTaskRecord>
-  readonly fencedBlocks: Chunk.Chunk<CatalogFencedBlockRecord>
-  readonly diagnostics: Chunk.Chunk<CatalogDiagnostic>
-}
+export const sourceLine = (report: CheckReport, finding: CheckFinding): string | undefined =>
+  report.vault.sourceLine(finding.path, finding.position?.start.line ?? 0)
 
 export type CheckIndexes = {
   readonly notesByKey: ReadonlyMap<string, Chunk.Chunk<string>>
@@ -56,8 +37,8 @@ export type CheckIndexes = {
 
 export type CheckContextShape = {
   readonly scope: VaultScope
-  readonly snapshot: CatalogSnapshot
-  readonly files: Chunk.Chunk<CheckFile>
+  readonly vault: VaultShape
+  readonly selected: (path: string) => boolean
   readonly indexes: CheckIndexes
 }
 

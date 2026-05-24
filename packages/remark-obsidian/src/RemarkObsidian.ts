@@ -2,7 +2,7 @@ import type { Parent, Text } from "mdast"
 import type { Node, Position } from "unist"
 import type { Plugin, Transformer } from "unified"
 import { scanInlineFields, type InlineFieldSpan } from "./InlineFieldScanner"
-import type { ObsidianInlineField, ObsidianWikilink, SourceSpan } from "./ObsidianNodes"
+import type { ObsidianInlineField, ObsidianTag, ObsidianWikilink, SourceSpan } from "./ObsidianNodes"
 
 type MutableParent = Parent & {
   children: Node[]
@@ -15,6 +15,15 @@ type MutableNode = Node & {
 type ObsidianPluginData = Record<string, unknown> & {
   obsidianWikilinks?: ObsidianWikilink[]
   obsidianInlineFields?: ObsidianInlineField[]
+  obsidianTags?: ObsidianTag[]
+  obsidianTask?: {
+    readonly done: boolean
+    readonly text: string
+    readonly rawText: string
+    readonly tags: readonly ObsidianTag[]
+    readonly inlineFields: readonly ObsidianInlineField[]
+    readonly position?: Position
+  }
 }
 
 type WikilinkSpan = {
@@ -31,7 +40,18 @@ type InlineFieldNodeSpan = {
   readonly node: ObsidianInlineField
 }
 
-type SyntaxSpan = WikilinkSpan | InlineFieldNodeSpan
+type WithRelativeSpan = {
+  readonly span?: SourceSpan
+}
+
+type TagNodeSpan = {
+  readonly kind: "tag"
+  readonly start: number
+  readonly end: number
+  readonly node: ObsidianTag
+}
+
+type SyntaxSpan = WikilinkSpan | InlineFieldNodeSpan | TagNodeSpan
 
 type WikilinkParts = {
   readonly target: string
@@ -42,7 +62,7 @@ type WikilinkParts = {
 
 export type RemarkObsidianOptions = Record<string, never>
 
-export const remarkObsidian: Plugin<[RemarkObsidianOptions?], Node> = (): Transformer<Node> => (tree) => {
+export const remarkObsidian: Plugin<[RemarkObsidianOptions?], Node> = (): Transformer<Node> => (tree, file) => {
   visitTextNodes(tree, [], (text, ancestors) => {
     const parent = ancestors[ancestors.length - 1] as MutableParent | undefined
     if (parent === undefined) {
@@ -55,22 +75,26 @@ export const remarkObsidian: Plugin<[RemarkObsidianOptions?], Node> = (): Transf
     }
 
     const wikilinks = scanWikilinks(text.value, text.position)
-    const inlineFields = scanInlineFields(text.value).map((field) => inlineFieldNode(field, text.position))
-    if (wikilinks.length === 0 && inlineFields.length === 0) {
+    const inlineFields = scanInlineFields(text.value).map((field) => inlineFieldNode(text.value, field, text.position))
+    const tags = scanTags(text.value, text.position).filter(
+      (tag) => !overlapsAny(relativeSpan(tag), wikilinks, inlineFields)
+    )
+    if (wikilinks.length === 0 && inlineFields.length === 0 && tags.length === 0) {
       return
     }
 
-    attachSyntaxData(parent, wikilinks, inlineFields)
-    attachSyntaxData(text, wikilinks, inlineFields)
+    attachSyntaxData(parent, wikilinks, inlineFields, tags)
+    attachSyntaxData(text, wikilinks, inlineFields, tags)
 
     const listItem = nearestListItem(ancestors)
     if (listItem !== undefined) {
-      attachSyntaxData(listItem, wikilinks, inlineFields)
+      attachSyntaxData(listItem, wikilinks, inlineFields, tags)
     }
 
-    const replacements = replaceTextNode(text, wikilinks, inlineFields)
+    const replacements = replaceTextNode(text, wikilinks, inlineFields, tags)
     parent.children.splice(index, 1, ...replacements)
   })
+  annotateTasks(tree, String(file.value ?? ""))
 }
 
 const visitTextNodes = (
@@ -103,9 +127,10 @@ const visitTextNodes = (
 const replaceTextNode = (
   text: Text,
   wikilinks: readonly ObsidianWikilink[],
-  inlineFields: readonly ObsidianInlineField[]
+  inlineFields: readonly ObsidianInlineField[],
+  tags: readonly ObsidianTag[]
 ): Node[] => {
-  const spans = syntaxSpans(wikilinks, inlineFields)
+  const spans = syntaxSpans(wikilinks, inlineFields, tags)
   if (spans.length === 0) {
     return [text]
   }
@@ -126,7 +151,12 @@ const replaceTextNode = (
     }
 
     if (span.start > cursor) {
-      replacements.push(textSegment(text.value.slice(cursor, span.start), text.position))
+      replacements.push(
+        textSegment(
+          text.value.slice(cursor, span.start),
+          relativePosition(text.value, text.position, { start: cursor, end: span.start })
+        )
+      )
     }
 
     replacements.push(span.node)
@@ -135,7 +165,12 @@ const replaceTextNode = (
   }
 
   if (cursor < text.value.length) {
-    replacements.push(textSegment(text.value.slice(cursor), text.position))
+    replacements.push(
+      textSegment(
+        text.value.slice(cursor),
+        relativePosition(text.value, text.position, { start: cursor, end: text.value.length })
+      )
+    )
   }
 
   return replacements
@@ -143,14 +178,16 @@ const replaceTextNode = (
 
 const syntaxSpans = (
   wikilinks: readonly ObsidianWikilink[],
-  inlineFields: readonly ObsidianInlineField[]
+  inlineFields: readonly ObsidianInlineField[],
+  tags: readonly ObsidianTag[]
 ): SyntaxSpan[] => {
   const spans: SyntaxSpan[] = []
   let wikilinkIndex = 0
   while (wikilinkIndex < wikilinks.length) {
     const wikilink = wikilinks[wikilinkIndex]
-    if (wikilink !== undefined && wikilink.span !== undefined) {
-      spans.push({ kind: "wikilink", start: wikilink.span.start, end: wikilink.span.end, node: wikilink })
+    const span = relativeSpan(wikilink)
+    if (wikilink !== undefined && span !== undefined) {
+      spans.push({ kind: "wikilink", start: span.start, end: span.end, node: wikilink })
     }
     wikilinkIndex += 1
   }
@@ -158,10 +195,21 @@ const syntaxSpans = (
   let fieldIndex = 0
   while (fieldIndex < inlineFields.length) {
     const field = inlineFields[fieldIndex]
-    if (field !== undefined) {
-      spans.push({ kind: "inlineField", start: field.span.start, end: field.span.end, node: field })
+    const span = relativeSpan(field)
+    if (field !== undefined && span !== undefined) {
+      spans.push({ kind: "inlineField", start: span.start, end: span.end, node: field })
     }
     fieldIndex += 1
+  }
+
+  let tagIndex = 0
+  while (tagIndex < tags.length) {
+    const tag = tags[tagIndex]
+    const span = relativeSpan(tag)
+    if (tag !== undefined && span !== undefined) {
+      spans.push({ kind: "tag", start: span.start, end: span.end, node: tag })
+    }
+    tagIndex += 1
   }
 
   spans.sort(compareSyntaxSpan)
@@ -175,7 +223,7 @@ const compareSyntaxSpan = (left: SyntaxSpan, right: SyntaxSpan): number => {
   if (left.kind === right.kind) {
     return right.end - left.end
   }
-  return left.kind === "inlineField" ? -1 : 1
+  return left.kind === "inlineField" ? -1 : right.kind === "inlineField" ? 1 : left.kind === "wikilink" ? -1 : 1
 }
 
 const textSegment = (value: string, position: Position | undefined): Text => ({
@@ -204,7 +252,14 @@ const scanWikilinks = (input: string, position: Position | undefined): ObsidianW
     const inner = input.slice(cursor + 2, close)
     const parsed = parseWikilink(inner)
     if (parsed !== undefined && parsed.target.length > 0) {
-      wikilinks.push(wikilinkNode(parsed, original, { start: cursor, end: close + 2 }, position))
+      wikilinks.push(
+        wikilinkNode(
+          parsed,
+          original,
+          { start: cursor, end: close + 2 },
+          relativePosition(input, position, { start: cursor, end: close + 2 })
+        )
+      )
     }
 
     cursor = close + 2
@@ -313,7 +368,7 @@ const wikilinkNode = (
     ...optionalString("heading", parts.heading),
     ...optionalString("block", parts.block),
     original,
-    span,
+    ...withRelativeSpan(span),
     ...optionalPosition(position),
     data: {
       hName: "a",
@@ -325,15 +380,19 @@ const wikilinkNode = (
   }
 }
 
-const inlineFieldNode = (field: InlineFieldSpan, position: Position | undefined): ObsidianInlineField => ({
+const inlineFieldNode = (
+  input: string,
+  field: InlineFieldSpan,
+  basePosition: Position | undefined
+): ObsidianInlineField => ({
   type: "obsidianInlineField",
   value: field.value,
   key: field.key,
   original: field.original,
   valueStart: field.valueStart,
   valueEnd: field.valueEnd,
-  span: field.span,
-  ...optionalPosition(position),
+  ...withRelativeSpan(field.span),
+  ...optionalPosition(relativePosition(input, basePosition, field.span)),
   data: {
     hName: "span",
     hProperties: {
@@ -342,6 +401,61 @@ const inlineFieldNode = (field: InlineFieldSpan, position: Position | undefined)
     }
   }
 })
+
+const tagPattern = /#[A-Za-z0-9/_-]+\b/g
+
+const scanTags = (input: string, basePosition: Position | undefined): ObsidianTag[] => {
+  const tags: ObsidianTag[] = []
+  for (const match of input.matchAll(tagPattern)) {
+    const start = match.index
+    if (start === undefined) {
+      continue
+    }
+    const original = match[0]
+    tags.push({
+      type: "obsidianTag",
+      value: original,
+      original,
+      ...optionalPosition(relativePosition(input, basePosition, { start, end: start + original.length })),
+      ...withRelativeSpan({ start, end: start + original.length }),
+      data: {
+        hName: "span",
+        hProperties: {
+          className: ["tag"]
+        }
+      }
+    })
+  }
+  return tags
+}
+
+const relativeSpan = (node: unknown): SourceSpan | undefined => (node as WithRelativeSpan).span
+
+const withRelativeSpan = (span: SourceSpan): { readonly span: SourceSpan } => ({ span })
+
+const overlapsAny = (
+  span: SourceSpan | undefined,
+  wikilinks: readonly ObsidianWikilink[],
+  inlineFields: readonly ObsidianInlineField[]
+): boolean => {
+  if (span === undefined) {
+    return false
+  }
+  for (const wikilink of wikilinks) {
+    if (overlaps(span, relativeSpan(wikilink))) {
+      return true
+    }
+  }
+  for (const inlineField of inlineFields) {
+    if (overlaps(span, relativeSpan(inlineField))) {
+      return true
+    }
+  }
+  return false
+}
+
+const overlaps = (left: SourceSpan, right: SourceSpan | undefined): boolean =>
+  right !== undefined && left.start < right.end && right.start < left.end
 
 const optionalString = <Key extends string>(key: Key, value: string | undefined): Partial<Record<Key, string>> => {
   if (value === undefined || value.length === 0) {
@@ -357,10 +471,98 @@ const optionalPosition = (position: Position | undefined): Partial<{ readonly po
   return { position }
 }
 
+const relativePosition = (input: string, base: Position | undefined, span: SourceSpan): Position | undefined => {
+  if (base === undefined) {
+    return undefined
+  }
+  const start = advancePoint(input, base.start, span.start)
+  const end = advancePoint(input, base.start, span.end)
+  return { start, end }
+}
+
+const advancePoint = (input: string, start: Position["start"], offset: number): Position["start"] => {
+  let line = start.line
+  let column = start.column
+  const absoluteOffset = start.offset === undefined ? undefined : start.offset + offset
+  let index = 0
+  while (index < offset && index < input.length) {
+    if (input.charCodeAt(index) === 10) {
+      line += 1
+      column = 1
+    } else {
+      column += 1
+    }
+    index += 1
+  }
+  return absoluteOffset === undefined ? { line, column } : { line, column, offset: absoluteOffset }
+}
+
+const annotateTasks = (tree: Node, markdown: string): void => {
+  visitAll(tree, (node) => {
+    if (node.type !== "listItem") {
+      return
+    }
+    const item = node as MutableNode & { readonly checked?: boolean | null; readonly position?: Position }
+    if (typeof item.checked !== "boolean") {
+      return
+    }
+    const data = (item.data ?? {}) as ObsidianPluginData
+    const rawText = firstSourceLine(markdown, item.position) || nodeText(item)
+    data.obsidianTask = {
+      done: item.checked,
+      rawText,
+      text: taskText(rawText),
+      tags: data.obsidianTags ?? [],
+      inlineFields: data.obsidianInlineFields ?? [],
+      ...optionalPosition(item.position)
+    }
+    item.data = data
+  })
+}
+
+const visitAll = (node: Node, visitor: (node: Node) => void): void => {
+  visitor(node)
+  const children = (node as Partial<MutableParent>).children
+  if (children === undefined) {
+    return
+  }
+  for (const child of children) {
+    visitAll(child, visitor)
+  }
+}
+
+const firstSourceLine = (markdown: string, position: Position | undefined): string => {
+  const start = position?.start.offset
+  if (start === undefined) {
+    return ""
+  }
+  const lineEnd = markdown.indexOf("\n", start)
+  return lineEnd === -1 ? markdown.slice(start) : markdown.slice(start, lineEnd)
+}
+
+const taskText = (rawText: string): string => rawText.replace(/^\s*[-*+]\s+\[[ xX]\]\s*/, "")
+
+const nodeText = (node: Node): string => {
+  const value = (node as { readonly value?: unknown }).value
+  if (typeof value === "string") {
+    return value
+  }
+  const children = (node as Partial<MutableParent>).children
+  if (children === undefined) {
+    return ""
+  }
+  let text = ""
+  for (const child of children) {
+    text = text + nodeText(child)
+  }
+  return text
+}
+
 const attachSyntaxData = (
   node: MutableNode,
   wikilinks: readonly ObsidianWikilink[],
-  inlineFields: readonly ObsidianInlineField[]
+  inlineFields: readonly ObsidianInlineField[],
+  tags: readonly ObsidianTag[]
 ): void => {
   const data = (node.data ?? {}) as ObsidianPluginData
   if (wikilinks.length > 0) {
@@ -368,6 +570,9 @@ const attachSyntaxData = (
   }
   if (inlineFields.length > 0) {
     data.obsidianInlineFields = appendAll(data.obsidianInlineFields, inlineFields)
+  }
+  if (tags.length > 0) {
+    data.obsidianTags = appendAll(data.obsidianTags, tags)
   }
   node.data = data
 }

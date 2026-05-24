@@ -1,11 +1,12 @@
 import { assert, describe, it } from "@effect/vitest"
 import { Chunk, Effect, Layer, Result, Trie } from "effect"
-import { CatalogService } from "../src/CatalogService"
+
 import { CheckService } from "../src/CheckService"
 import type { CheckFinding } from "../src/CheckModel"
 import { MarkdownFile } from "../src/markdown/MarkdownModel"
 import { MarkdownParser } from "../src/markdown/MarkdownParser"
 import { VaultService } from "../src/VaultService"
+import { Vault } from "../src/Vault"
 import { MarkdownParseError } from "../src/VaultErrors"
 import * as VaultScope from "../src/VaultScope"
 
@@ -85,13 +86,13 @@ const vaultLayer = (state: TestVaultState) =>
         readText,
         writeText: () => Effect.void,
         readMarkdown,
-        readMarkdownTree
+        readMarkdownTree,
+        scoped: (scope) => Effect.flatMap(readMarkdownTree(scope), (tree) => Vault.make({ scope, tree }))
       })
     })
   ).pipe(Layer.provide(MarkdownParser.layer))
 
-const checkLayer = (state: TestVaultState) =>
-  CheckService.layer.pipe(Layer.provide(CatalogService.layer), Layer.provide(vaultLayer(state)))
+const checkLayer = (state: TestVaultState) => CheckService.layer.pipe(Layer.provide(vaultLayer(state)))
 
 const absolutePath = (path: string): string => `${testRoot}/${normalizePath(path)}`
 
@@ -129,7 +130,7 @@ const summaries = (findings: Chunk.Chunk<CheckFinding>): ReadonlyArray<FindingSu
     finding.category,
     finding.severity,
     finding.path,
-    finding.lineNumber,
+    finding.position?.start.line,
     finding.message,
     finding.triggerPath,
     finding.relatedPaths === undefined ? [] : toArray(finding.relatedPaths)
@@ -161,12 +162,12 @@ describe("CheckService", () => {
       const linkFindings = toArray(report.findings).filter((finding) => finding.category === "links")
 
       assert.deepStrictEqual(summaries(Chunk.fromIterable(linkFindings)), [
-        ["links", "error", "Notes/Source.md", undefined, "Broken link: [[Missing]]", "Notes/Source.md", []],
+        ["links", "error", "Notes/Source.md", 2, "Broken link: [[Missing]]", "Notes/Source.md", []],
         [
           "links",
           "warning",
           "Notes/Source.md",
-          undefined,
+          2,
           "Ambiguous link: [[Beta]]",
           "Notes/Source.md",
           ["Notes/Beta.md", "Other/Beta.md"]
@@ -175,7 +176,7 @@ describe("CheckService", () => {
           "links",
           "warning",
           "Notes/Source.md",
-          undefined,
+          2,
           "Ambiguous link: [[Shared H1]]",
           "Notes/Source.md",
           ["Notes/SharedA.md", "Other/SharedB.md"]
@@ -206,7 +207,7 @@ describe("CheckService", () => {
           "headings",
           "warning",
           "30-Projects/A.md",
-          undefined,
+          1,
           "Duplicate active H1: Active Duplicate",
           "30-Projects/A.md",
           ["30-Projects/B.md"]
@@ -215,7 +216,7 @@ describe("CheckService", () => {
           "headings",
           "warning",
           "30-Projects/B.md",
-          undefined,
+          1,
           "Duplicate active H1: Active Duplicate",
           "30-Projects/B.md",
           ["30-Projects/A.md"]
@@ -224,7 +225,7 @@ describe("CheckService", () => {
           "archive-headings",
           "error",
           "30-Projects/Live.md",
-          undefined,
+          1,
           "Archive H1 collision: Archived Topic",
           "30-Projects/Live.md",
           ["90-Archive/Live.md"]
@@ -233,7 +234,7 @@ describe("CheckService", () => {
           "archive-headings",
           "error",
           "90-Archive/Live.md",
-          undefined,
+          1,
           "Archive H1 collision: Archived Topic",
           "90-Archive/Live.md",
           ["30-Projects/Live.md"]
@@ -267,7 +268,7 @@ describe("CheckService", () => {
           "title-drift",
           "warning",
           "Notes/Drift.md",
-          undefined,
+          1,
           "Frontmatter title does not match note title: Wrong Title",
           "Notes/Drift.md",
           []
@@ -276,20 +277,12 @@ describe("CheckService", () => {
           "title-drift",
           "warning",
           "Notes/Drift.md",
-          undefined,
+          1,
           "Frontmatter topic does not match note title: Wrong Topic",
           "Notes/Drift.md",
           []
         ],
-        [
-          "title-drift",
-          "warning",
-          "Notes/Drift.md",
-          undefined,
-          "H1 does not match note title: Wrong H1",
-          "Notes/Drift.md",
-          []
-        ]
+        ["title-drift", "warning", "Notes/Drift.md", 6, "H1 does not match note title: Wrong H1", "Notes/Drift.md", []]
       ])
     }).pipe(Effect.provide(checkLayer(state)))
   })
@@ -339,7 +332,7 @@ describe("CheckService", () => {
         "Open task is missing [project:: ...] metadata"
       ])
       assert.deepStrictEqual(
-        taskFindings.map((finding) => [finding.path, finding.lineNumber, finding.triggerPath]),
+        taskFindings.map((finding) => [finding.path, finding.position?.start.line, finding.triggerPath]),
         [
           ["Tasks.md", 2, "Tasks.md"],
           ["Tasks.md", 2, "Tasks.md"],
@@ -373,7 +366,7 @@ describe("CheckService", () => {
     }).pipe(Effect.provide(checkLayer(state)))
   })
 
-  it.effect("runFile and runFiles select analyzer triggers while retaining full-snapshot relationship indexes", () => {
+  it.effect("runFile and runFiles select analyzer triggers while retaining scoped relationship indexes", () => {
     const state: TestVaultState = {
       files: {
         [absolutePath("Links/Trigger.md")]: ["# Trigger", "[[Shared Target]]"].join("\n"),
@@ -392,7 +385,7 @@ describe("CheckService", () => {
           "links",
           "warning",
           "Links/Trigger.md",
-          undefined,
+          2,
           "Ambiguous link: [[Shared Target]]",
           "Links/Trigger.md",
           ["30-Projects/A/Shared Target.md", "30-Projects/B/Shared Target.md"]
@@ -403,7 +396,7 @@ describe("CheckService", () => {
           "headings",
           "warning",
           "30-Projects/A/Shared Target.md",
-          undefined,
+          1,
           "Duplicate active H1: Shared Target",
           "30-Projects/A/Shared Target.md",
           ["30-Projects/B/Shared Target.md"]
@@ -431,7 +424,7 @@ describe("CheckService", () => {
           "title-drift",
           "warning",
           "30-Projects/Drift.md",
-          undefined,
+          1,
           "H1 does not match note title: Wrong Project Title",
           "30-Projects/Drift.md",
           []

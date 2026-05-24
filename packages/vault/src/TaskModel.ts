@@ -3,9 +3,21 @@ import { Schema } from "effect"
 export const IsoDate = Schema.TemplateLiteral([Schema.Number, "-", Schema.Number, "-", Schema.Number])
 export type IsoDate = typeof IsoDate.Type
 
+export const SourcePoint = Schema.Struct({
+  line: Schema.Number,
+  column: Schema.Number,
+  offset: Schema.optional(Schema.Number)
+})
+
+export const SourcePosition = Schema.Struct({
+  start: SourcePoint,
+  end: SourcePoint
+})
+
 export class TaskSource extends Schema.Class<TaskSource>("@kb/vault/TaskSource")({
   path: Schema.String,
-  lineNumber: Schema.Number
+  lineNumber: Schema.Number,
+  position: Schema.optionalKey(SourcePosition)
 }) {}
 
 export class ParsedTask extends Schema.Class<ParsedTask>("@kb/vault/ParsedTask")({

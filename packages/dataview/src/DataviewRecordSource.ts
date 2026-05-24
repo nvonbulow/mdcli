@@ -1,5 +1,4 @@
 import {
-  CatalogService,
   fromPath,
   fromPattern,
   isGlobPattern,
@@ -7,6 +6,7 @@ import {
   type ParsedTask,
   type TaskParseError,
   type VaultIoError,
+  VaultService,
   type VaultScope
 } from "@kb/vault"
 import * as Chunk from "effect/Chunk"
@@ -28,15 +28,16 @@ export type DataviewRecordSourceService = {
 export class DataviewRecordSource extends Context.Service<DataviewRecordSource, DataviewRecordSourceService>()(
   "@kb/dataview/DataviewRecordSource"
 ) {
-  static readonly layerNoDeps: Layer.Layer<DataviewRecordSource, never, CatalogService> = Layer.effect(
+  static readonly layerNoDeps: Layer.Layer<DataviewRecordSource, never, VaultService> = Layer.effect(
     this,
     Effect.gen(function* () {
-      const catalog = yield* CatalogService
+      const vaultService = yield* VaultService
       const recordsFor = Effect.fn("@kb/dataview/DataviewRecordSource.recordsFor")(function* (
         query: DataviewTaskQuery
       ) {
         const scope = yield* scopeFromQuery(query)
-        const tasks = yield* catalog.listTasks(scope)
+        const vault = yield* vaultService.scoped(scope)
+        const tasks = yield* vault.tasks()
         return Chunk.toReadonlyArray(Chunk.map(tasks, (record) => taskRecord(record.task)))
       })
       return DataviewRecordSource.of({ recordsFor })

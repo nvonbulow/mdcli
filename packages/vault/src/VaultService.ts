@@ -19,12 +19,14 @@ import { MarkdownParser } from "./markdown/MarkdownParser"
 import type { MarkdownParseError } from "./VaultErrors"
 import { VaultIoError } from "./VaultErrors"
 import type { VaultScope } from "./VaultScope"
+import { Vault, type VaultShape } from "./Vault"
 
 export type VaultServiceShape = {
   readonly readText: (path: string) => Effect.Effect<string, VaultIoError>
   readonly writeText: (path: string, contents: string) => Effect.Effect<void, VaultIoError>
   readonly readMarkdown: (path: string) => Effect.Effect<MarkdownFile, VaultIoError | MarkdownParseError>
   readonly readMarkdownTree: (scope: VaultScope) => Effect.Effect<MarkdownTree, VaultIoError>
+  readonly scoped: (scope: VaultScope) => Effect.Effect<VaultShape, VaultIoError>
 }
 
 export class VaultService extends Context.Service<VaultService, VaultServiceShape>()("@kb/vault/VaultService") {
@@ -119,11 +121,17 @@ const makeVaultService = (root: string) =>
       }
     )
 
+    const scoped = Effect.fn("VaultService.scoped")(function* (scope: VaultScope) {
+      const tree = yield* readMarkdownTree(scope)
+      return yield* Vault.make({ scope, tree })
+    })
+
     return VaultService.of({
       readText,
       writeText,
       readMarkdown,
-      readMarkdownTree
+      readMarkdownTree,
+      scoped
     })
   })
 

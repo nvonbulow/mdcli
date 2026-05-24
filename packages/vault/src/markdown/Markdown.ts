@@ -1,18 +1,9 @@
-import type { Code, Heading, Root, Yaml } from "mdast"
+import type { ObsidianListItem, ObsidianTag, ObsidianWikilink } from "@kb/remark-obsidian"
+import type { Code, Heading, ListItem, Root, Yaml } from "mdast"
 import { Chunk } from "effect"
 import * as Effect from "effect/Effect"
-import {
-  MarkdownFencedBlock,
-  MarkdownFile,
-  MarkdownHeading,
-  MarkdownInlineField,
-  MarkdownListItem,
-  MarkdownTag,
-  MarkdownTask,
-  MarkdownWikilink,
-  RawFrontmatter,
-  SourceSpan
-} from "./MarkdownModel"
+
+import { MarkdownFile } from "./MarkdownModel"
 import { MarkdownParser } from "./MarkdownParser"
 
 export const Markdown = {
@@ -21,100 +12,61 @@ export const Markdown = {
       const parser = yield* MarkdownParser
       return yield* parser.parse(markdown)
     }),
-  getFrontmatter: (file: MarkdownFile): Chunk.Chunk<RawFrontmatter> =>
-    Chunk.fromIterable(collectFrontmatter(rootOf(file))),
-  getHeadings: (file: MarkdownFile): Chunk.Chunk<MarkdownHeading> => Chunk.fromIterable(collectHeadings(rootOf(file))),
-  getWikilinks: (file: MarkdownFile): Chunk.Chunk<MarkdownWikilink> =>
+  getFrontmatter: (file: MarkdownFile): Chunk.Chunk<Yaml> => Chunk.fromIterable(collectFrontmatter(rootOf(file))),
+  getHeadings: (file: MarkdownFile): Chunk.Chunk<Heading> => Chunk.fromIterable(collectHeadings(rootOf(file))),
+  getWikilinks: (file: MarkdownFile): Chunk.Chunk<ObsidianWikilink> =>
     Chunk.fromIterable(collectWikilinks(rootOf(file))),
-  getListItems: (file: MarkdownFile): Chunk.Chunk<MarkdownListItem> =>
-    Chunk.fromIterable(collectListItems(rootOf(file))),
-  getTasks: (file: MarkdownFile): Chunk.Chunk<MarkdownTask> => Chunk.fromIterable(collectTasks(rootOf(file))),
-  getTags: (file: MarkdownFile): Chunk.Chunk<MarkdownTag> => Chunk.fromIterable(collectTags(rootOf(file))),
-  getInlineFields: (file: MarkdownFile): Chunk.Chunk<MarkdownInlineField> =>
-    Chunk.fromIterable(collectInlineFields(rootOf(file))),
-  getFencedBlocks: (file: MarkdownFile): Chunk.Chunk<MarkdownFencedBlock> =>
-    Chunk.fromIterable(collectFencedBlocks(rootOf(file)))
+  getListItems: (file: MarkdownFile): Chunk.Chunk<ListItem> => Chunk.fromIterable(collectListItems(rootOf(file))),
+  getTasks: (file: MarkdownFile): Chunk.Chunk<ObsidianListItem> => Chunk.fromIterable(collectTasks(rootOf(file))),
+  getTags: (file: MarkdownFile): Chunk.Chunk<ObsidianTag> => Chunk.fromIterable(collectTags(rootOf(file))),
+  getFencedBlocks: (file: MarkdownFile): Chunk.Chunk<Code> => Chunk.fromIterable(collectFencedBlocks(rootOf(file))),
+  headingText: (node: Heading): string => nodeText(node),
+  listItemText: (node: ListItem): string => listItemText(node),
+  fencedBlockLanguage: (node: Code): string | undefined => node.lang ?? undefined,
+  fencedBlockMeta: (node: Code): string | undefined => node.meta ?? undefined
 } as const
 
 type MarkdownNode = {
   readonly type: string
   readonly children?: ReadonlyArray<MarkdownNode>
   readonly value?: unknown
-  readonly data?: {
-    readonly obsidianWikilinks?: ReadonlyArray<ObsidianWikilinkNode>
-    readonly obsidianInlineFields?: ReadonlyArray<ObsidianInlineFieldNode>
+  readonly data?: Record<string, unknown> & {
+    readonly obsidianWikilinks?: ReadonlyArray<ObsidianWikilink>
+    readonly obsidianInlineFields?: ReadonlyArray<unknown>
+    readonly obsidianTags?: ReadonlyArray<ObsidianTag>
   }
-  readonly position?: {
-    readonly start?: { readonly offset?: number }
-    readonly end?: { readonly offset?: number }
-  }
-}
-
-type ObsidianWikilinkNode = MarkdownNode & {
-  readonly type: "obsidianWikilink"
-  readonly value: string
-  readonly target: string
-  readonly original: string
-  readonly alias?: string
-  readonly heading?: string
-  readonly block?: string
-  readonly span?: { readonly start: number; readonly end: number }
-}
-
-type ObsidianInlineFieldNode = MarkdownNode & {
-  readonly type: "obsidianInlineField"
-  readonly key: string
-  readonly value: string
-  readonly original: string
-  readonly valueStart: number
-  readonly valueEnd: number
-  readonly span: { readonly start: number; readonly end: number }
 }
 
 type Visitor = (node: MarkdownNode) => void
 
 const rootOf = (file: MarkdownFile): Root & MarkdownNode => file.mdast as Root & MarkdownNode
 
-const collectFrontmatter = (root: Root & MarkdownNode): ReadonlyArray<RawFrontmatter> => {
-  const frontmatter: Array<RawFrontmatter> = []
+const collectFrontmatter = (root: Root & MarkdownNode): ReadonlyArray<Yaml> => {
+  const frontmatter: Array<Yaml> = []
   visit(root, (node) => {
     if (node.type === "yaml") {
-      const yaml = node as Yaml
-      frontmatter.push(
-        new RawFrontmatter({
-          value: yaml.value,
-          language: "yaml",
-          ...optionalSpan(nodeSpan(yaml))
-        })
-      )
+      frontmatter.push(node as Yaml)
     }
   })
   return frontmatter
 }
 
-const collectHeadings = (root: Root & MarkdownNode): ReadonlyArray<MarkdownHeading> => {
-  const headings: Array<MarkdownHeading> = []
+const collectHeadings = (root: Root & MarkdownNode): ReadonlyArray<Heading> => {
+  const headings: Array<Heading> = []
   visit(root, (node) => {
     if (node.type === "heading") {
-      const heading = node as Heading
-      headings.push(
-        new MarkdownHeading({
-          depth: heading.depth,
-          text: nodeText(heading),
-          ...optionalSpan(nodeSpan(heading))
-        })
-      )
+      headings.push(node as unknown as Heading)
     }
   })
   return headings
 }
 
-const collectWikilinks = (root: Root & MarkdownNode): ReadonlyArray<MarkdownWikilink> => {
-  const wikilinks: Array<MarkdownWikilink> = []
+const collectWikilinks = (root: Root & MarkdownNode): ReadonlyArray<ObsidianWikilink> => {
+  const wikilinks: Array<ObsidianWikilink> = []
   const seen = new Set<string>()
   visit(root, (node) => {
     if (isWikilinkNode(node)) {
-      pushWikilink(wikilinks, seen, node)
+      pushWikilink(wikilinks, seen, node as unknown as ObsidianWikilink)
     }
     const dataLinks = node.data?.obsidianWikilinks
     if (dataLinks !== undefined) {
@@ -126,103 +78,53 @@ const collectWikilinks = (root: Root & MarkdownNode): ReadonlyArray<MarkdownWiki
   return wikilinks
 }
 
-const collectInlineFields = (root: Root & MarkdownNode): ReadonlyArray<MarkdownInlineField> => {
-  const fields: Array<MarkdownInlineField> = []
-  const seen = new Set<string>()
-  visit(root, (node) => {
-    if (isInlineFieldNode(node)) {
-      pushInlineField(fields, seen, node)
-    }
-    const dataFields = node.data?.obsidianInlineFields
-    if (dataFields !== undefined) {
-      for (const field of dataFields) {
-        pushInlineField(fields, seen, field)
-      }
-    }
-  })
-  return fields
-}
-
-const collectListItems = (root: Root & MarkdownNode): ReadonlyArray<MarkdownListItem> => {
-  const items: Array<MarkdownListItem> = []
+const collectListItems = (root: Root & MarkdownNode): ReadonlyArray<ListItem> => {
+  const items: Array<ListItem> = []
   visit(root, (node) => {
     if (node.type === "listItem") {
-      const item = node as MarkdownNode & { readonly checked?: boolean | null }
-      items.push(
-        new MarkdownListItem({
-          text: listItemText(item),
-          ...optionalChecked(item.checked),
-          ...optionalSpan(nodeSpan(item))
-        })
-      )
+      items.push(node as unknown as ListItem)
     }
   })
   return items
 }
 
-const collectTasks = (root: Root & MarkdownNode): ReadonlyArray<MarkdownTask> => {
-  const tasks: Array<MarkdownTask> = []
+const collectTasks = (root: Root & MarkdownNode): ReadonlyArray<ObsidianListItem> => {
+  const tasks: Array<ObsidianListItem> = []
   visit(root, (node) => {
     if (node.type === "listItem") {
-      const item = node as MarkdownNode & { readonly checked?: boolean | null }
-      if (typeof item.checked === "boolean") {
-        tasks.push(
-          new MarkdownTask({
-            done: item.checked,
-            text: listItemText(item),
-            fields: Chunk.fromIterable(collectInlineFieldsFromNode(item)),
-            tags: Chunk.fromIterable(collectTagsFromNode(item)),
-            ...optionalSpan(nodeSpan(item))
-          })
-        )
+      const item = node as unknown as ObsidianListItem
+      if (item.data?.obsidianTask !== undefined) {
+        tasks.push(item)
       }
     }
   })
   return tasks
 }
 
-const collectTags = (root: Root & MarkdownNode): ReadonlyArray<MarkdownTag> => collectTagsFromNode(root)
+const collectTags = (root: Root & MarkdownNode): ReadonlyArray<ObsidianTag> => collectTagsFromNode(root)
 
-const collectFencedBlocks = (root: Root & MarkdownNode): ReadonlyArray<MarkdownFencedBlock> => {
-  const blocks: Array<MarkdownFencedBlock> = []
+const collectFencedBlocks = (root: Root & MarkdownNode): ReadonlyArray<Code> => {
+  const blocks: Array<Code> = []
   visit(root, (node) => {
     if (node.type === "code") {
-      const code = node as Code
-      blocks.push(
-        new MarkdownFencedBlock({
-          value: code.value,
-          ...optionalString("language", code.lang ?? undefined),
-          ...optionalString("meta", code.meta ?? undefined),
-          ...optionalSpan(nodeSpan(code))
-        })
-      )
+      blocks.push(node as Code)
     }
   })
   return blocks
 }
 
-const collectInlineFieldsFromNode = (node: unknown): ReadonlyArray<MarkdownInlineField> => {
-  const fields: Array<MarkdownInlineField> = []
+const collectTagsFromNode = (node: unknown): ReadonlyArray<ObsidianTag> => {
+  const tags: Array<ObsidianTag> = []
   const seen = new Set<string>()
   visit(toMarkdownNode(node), (current) => {
-    if (isInlineFieldNode(current)) {
-      pushInlineField(fields, seen, current)
+    if (isTagNode(current)) {
+      pushTag(tags, seen, current as unknown as ObsidianTag)
     }
-    const dataFields = current.data?.obsidianInlineFields
-    if (dataFields !== undefined) {
-      for (const field of dataFields) {
-        pushInlineField(fields, seen, field)
+    const dataTags = current.data?.obsidianTags
+    if (dataTags !== undefined) {
+      for (const tag of dataTags) {
+        pushTag(tags, seen, tag)
       }
-    }
-  })
-  return fields
-}
-
-const collectTagsFromNode = (node: unknown): ReadonlyArray<MarkdownTag> => {
-  const tags: Array<MarkdownTag> = []
-  visit(toMarkdownNode(node), (current) => {
-    if (current.type === "text") {
-      pushTextTags(tags, current)
     }
   })
   return tags
@@ -297,128 +199,37 @@ const nodeTextWithoutNestedLists = (node: unknown): string => {
   return text
 }
 
-const tagPattern = /#[A-Za-z0-9/_-]+/g
-
-const pushTextTags = (tags: Array<MarkdownTag>, node: MarkdownNode): void => {
-  if (typeof node.value !== "string") {
-    return
-  }
-  const baseSpan = nodeSpan(node)
-  const baseStart = baseSpan?.start ?? 0
-  for (const match of node.value.matchAll(tagPattern)) {
-    const index = match.index
-    if (index !== undefined) {
-      tags.push(
-        new MarkdownTag({
-          value: match[0],
-          span: new SourceSpan({ start: baseStart + index, end: baseStart + index + match[0].length })
-        })
-      )
-    }
-  }
-}
-
-const pushWikilink = (wikilinks: Array<MarkdownWikilink>, seen: Set<string>, link: ObsidianWikilinkNode): void => {
-  const span = syntaxSpan(link)
-  const key = link.original + ":" + spanKey(span)
+const pushWikilink = (wikilinks: Array<ObsidianWikilink>, seen: Set<string>, link: ObsidianWikilink): void => {
+  const key = link.original + ":" + positionKey(link.position)
   if (seen.has(key)) {
     return
   }
   seen.add(key)
-  wikilinks.push(
-    new MarkdownWikilink({
-      target: link.target,
-      value: link.value,
-      original: link.original,
-      ...optionalString("alias", link.alias),
-      ...optionalString("heading", link.heading),
-      ...optionalString("block", link.block),
-      ...optionalSpan(span)
-    })
-  )
+  wikilinks.push(link)
 }
 
-const pushInlineField = (
-  fields: Array<MarkdownInlineField>,
-  seen: Set<string>,
-  field: ObsidianInlineFieldNode
-): void => {
-  const span = syntaxSpan(field)
-  const key = field.original + ":" + spanKey(span)
+const pushTag = (tags: Array<ObsidianTag>, seen: Set<string>, tag: ObsidianTag): void => {
+  const key = tag.original + ":" + positionKey(tag.position)
   if (seen.has(key)) {
     return
   }
   seen.add(key)
-  fields.push(
-    new MarkdownInlineField({
-      key: field.key,
-      value: field.value,
-      original: field.original,
-      valueStart: field.valueStart,
-      valueEnd: field.valueEnd,
-      span: span ?? new SourceSpan({ start: field.valueStart, end: field.valueEnd })
-    })
-  )
+  tags.push(tag)
 }
 
-const isWikilinkNode = (node: MarkdownNode): node is ObsidianWikilinkNode => node.type === "obsidianWikilink"
-
-const isInlineFieldNode = (node: MarkdownNode): node is ObsidianInlineFieldNode => node.type === "obsidianInlineField"
-
-const nodeSpan = (node: unknown): SourceSpan | undefined => {
-  const position = toMarkdownNode(node).position
-  const start = position?.start?.offset
-  const end = position?.end?.offset
-  if (typeof start === "number" && typeof end === "number") {
-    return new SourceSpan({ start, end })
-  }
-  return undefined
-}
-
-const sourceSpan = (span: { readonly start: number; readonly end: number } | undefined): SourceSpan | undefined => {
-  if (span === undefined) {
-    return undefined
-  }
-  return new SourceSpan({ start: span.start, end: span.end })
-}
+const isWikilinkNode = (node: MarkdownNode): boolean => node.type === "obsidianWikilink"
+const isTagNode = (node: MarkdownNode): boolean => node.type === "obsidianTag"
 const toMarkdownNode = (node: unknown): MarkdownNode => node as MarkdownNode
-const syntaxSpan = (
-  node: MarkdownNode & { readonly span?: { readonly start: number; readonly end: number } }
-): SourceSpan | undefined => {
-  if (node.span === undefined) {
-    return undefined
-  }
-  const baseSpan = nodeSpan(node)
-  if (baseSpan === undefined) {
-    return sourceSpan(node.span)
-  }
-  return new SourceSpan({ start: baseSpan.start + node.span.start, end: baseSpan.start + node.span.end })
-}
 
-const optionalSpan = (span: SourceSpan | undefined): { readonly span?: SourceSpan } => {
-  if (span === undefined) {
-    return {}
-  }
-  return { span }
-}
-
-const optionalChecked = (checked: boolean | null | undefined): { readonly checked?: boolean } => {
-  if (typeof checked === "boolean") {
-    return { checked }
-  }
-  return {}
-}
-
-const optionalString = <Key extends string>(key: Key, value: string | undefined): Partial<Record<Key, string>> => {
-  if (value === undefined || value.length === 0) {
-    return {}
-  }
-  return { [key]: value } as Partial<Record<Key, string>>
-}
-
-const spanKey = (span: { readonly start: number; readonly end: number } | undefined): string => {
-  if (span === undefined) {
-    return "none"
-  }
-  return String(span.start) + "-" + String(span.end)
+const positionKey = (
+  position:
+    | {
+        readonly start: { readonly offset?: number | undefined }
+        readonly end: { readonly offset?: number | undefined }
+      }
+    | undefined
+): string => {
+  const start = position?.start.offset
+  const end = position?.end.offset
+  return typeof start === "number" && typeof end === "number" ? String(start) + "-" + String(end) : "none"
 }

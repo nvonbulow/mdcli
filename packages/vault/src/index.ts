@@ -1,10 +1,9 @@
 export * from "./DashboardModel"
 export * from "./TaskModel"
-export * as CatalogModel from "./CatalogModel"
 export { CalendarService, type CalendarServiceShape } from "./CalendarService"
-export { CatalogService, type CatalogServiceShape } from "./CatalogService"
 export { Markdown } from "./markdown/Markdown"
 export * as MarkdownModel from "./markdown/MarkdownModel"
+export { MarkdownAst } from "./markdown/MarkdownAst"
 export { MarkdownParser, type MarkdownParserService } from "./markdown/MarkdownParser"
 export * from "./VaultScope"
 export * as CheckModel from "./CheckModel"
@@ -28,7 +27,7 @@ export {
 } from "./CheckService"
 export {
   type CheckAnalyzer,
-  CatalogDiagnosticsCheckAnalyzer,
+  VaultDiagnosticsCheckAnalyzer,
   LinkIntegrityCheckAnalyzer,
   DuplicateHeadingCheckAnalyzer,
   TitleDriftCheckAnalyzer,
@@ -37,5 +36,6 @@ export {
   TaskMetadataCheckAnalyzer
 } from "./CheckAnalyzers"
 export { VaultService } from "./VaultService"
+export { Vault, type VaultRecord, type VaultShape } from "./Vault"
 export { parsedTasksFromMarkdownFile } from "./TaskParser"
 export * from "./VaultErrors"

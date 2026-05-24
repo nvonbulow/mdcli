@@ -141,6 +141,7 @@ time:
   picocolors@1.1.1: 2024-10-16T18:20:03.921Z
   picomatch@4.0.4: 2026-03-23T20:39:47.960Z
   postcss@8.5.15: 2026-05-19T09:51:29.843Z
+  prettier@3.8.3: 2026-04-15T00:55:25.573Z
   pure-rand@8.4.0: 2026-03-27T09:53:40.959Z
   redis-errors@1.2.0: 2017-06-01T00:22:49.218Z
   redis-parser@3.0.0: 2017-05-25T18:52:28.462Z
@@ -190,6 +191,9 @@ importers:
       '@types/node':
         specifier: ^24.10.1
         version: 24.12.4
+      prettier:
+        specifier: ^3.6.2
+        version: 3.8.3
       tsx:
         specifier: ^4.20.6
         version: 4.22.3
@@ -924,6 +928,11 @@ packages:
   postcss@8.5.15:
     resolution: {integrity: sha512-FfR8sjd4em2T6fb3I2MwAJU7HWVMr9zba+enmQeeWFfCbm+UOC/0X4DS8XtpUTMwWMGbjKYP7xjfNekzyGmB3A==}
     engines: {node: ^10 || ^12 || >=14}
+
+  prettier@3.8.3:
+    resolution: {integrity: sha512-7igPTM53cGHMW8xWuVTydi2KO233VFiTNyF5hLJqpilHfmn8C8gPf+PS7dUT64YcXFbiMGZxS9pCSxL/Dxm/Jw==}
+    engines: {node: '>=14'}
+    hasBin: true
 
   pure-rand@8.4.0:
     resolution: {integrity: sha512-IoM8YF/jY0hiugFo/wOWqfmarlE6J0wc6fDK1PhftMk7MGhVZl88sZimmqBBFomLOCSmcCCpsfj7wXASCpvK9A==}
@@ -1747,6 +1756,8 @@ snapshots:
       nanoid: 3.3.12
       picocolors: 1.1.1
       source-map-js: 1.2.1
+
+  prettier@3.8.3: {}
 
   pure-rand@8.4.0: {}
 

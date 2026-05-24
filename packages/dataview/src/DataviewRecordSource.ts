@@ -3,7 +3,7 @@ import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
 import { DataviewEvaluateError, type DataviewExpression, type DataviewTaskQuery } from "./DataviewAst"
-import { DataviewRecord, type DataviewScalar, type DataviewValue } from "./DataviewResult"
+import { DataviewRecord, type DataviewValue } from "./DataviewResult"
 
 export type DataviewRecordSourceService = {
   readonly recordsFor: (
@@ -30,18 +30,18 @@ export class DataviewRecordSource extends Context.Service<DataviewRecordSource, 
   )
 }
 
-export const taskRecord = (task: ParsedTask): DataviewRecord =>
+const taskRecord = (task: ParsedTask): DataviewRecord =>
   new DataviewRecord({
     original: task,
     fields: taskFields(task)
   })
 
-export const sourceFromQuery = (query: DataviewTaskQuery): Effect.Effect<string, DataviewEvaluateError> =>
+const sourceFromQuery = (query: DataviewTaskQuery): Effect.Effect<string, DataviewEvaluateError> =>
   query.source === undefined
     ? Effect.fail(new DataviewEvaluateError({ message: "Dataview query must specify an explicit source" }))
     : sourceFromExpression(query.source)
 
-export const sourceFromExpression = (expression: DataviewExpression): Effect.Effect<string, DataviewEvaluateError> => {
+const sourceFromExpression = (expression: DataviewExpression): Effect.Effect<string, DataviewEvaluateError> => {
   switch (expression._tag) {
     case "Identifier":
       return nonEmptySource(expression.name)
@@ -82,6 +82,3 @@ const nonEmptySource = (source: string): Effect.Effect<string, DataviewEvaluateE
   source.length === 0
     ? Effect.fail(new DataviewEvaluateError({ message: "Dataview query source must not be empty" }))
     : Effect.succeed(source)
-
-export const scalarValue = (value: DataviewValue): DataviewScalar => (isScalarArray(value) ? (value[0] ?? null) : value)
-const isScalarArray = (value: DataviewValue): value is ReadonlyArray<DataviewScalar> => Array.isArray(value)

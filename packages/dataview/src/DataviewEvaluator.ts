@@ -30,7 +30,7 @@ export type DataviewEvaluatorService = {
   ) => Effect.Effect<DataviewResultType, DataviewEvaluateError>
 }
 
-export const evaluate = Effect.fn("DataviewEvaluator.evaluate")(function* (
+const evaluate = Effect.fn("DataviewEvaluator.evaluate")(function* (
   queryText: string,
   query: DataviewTaskQuery,
   records: ReadonlyArray<DataviewRecord>,
@@ -61,7 +61,7 @@ export class DataviewEvaluator extends Context.Service<DataviewEvaluator, Datavi
 
 const emptyRecord = new DataviewRecord({ fields: {}, original: undefined })
 
-export const evaluateExpression = (
+const evaluateExpression = (
   expression: DataviewExpression,
   record: DataviewRecord,
   context: EvaluationContext
@@ -126,7 +126,7 @@ const evaluateBinary = (operator: string, left: DataviewValue, right: DataviewVa
 const calleeName = (expression: DataviewExpression): string | undefined =>
   expression._tag === "Identifier" ? expression.name : undefined
 
-export const truthy = (value: DataviewValue): boolean => {
+const truthy = (value: DataviewValue): boolean => {
   if (Array.isArray(value)) {
     return value.length > 0
   }

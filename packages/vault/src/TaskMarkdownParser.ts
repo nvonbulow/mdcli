@@ -1,8 +1,8 @@
-import { Option, String as Str } from "effect"
+import { String as Str } from "effect"
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
-import { extractInlineFieldsFromText, InlineFieldParser, stripInlineFieldMarkup } from "./InlineFieldParser"
+import { InlineFieldParser } from "./InlineFieldParser"
 import { ParsedTask, TaskSource, type IsoDate } from "./TaskModel"
 import type { TaskParseError } from "./VaultErrors"
 
@@ -29,8 +29,14 @@ export class TaskMarkdownParser extends Context.Service<TaskMarkdownParser, Task
               continue
             }
 
+            const taskTag = candidate.body.indexOf("#task")
+            if (taskTag === -1) {
+              continue
+            }
+
             const fields = yield* inlineFields.parse(candidate.body)
-            const task = parseTaskLineWithFields(candidate.marker, candidate.body, sourcePath, index + 1, fields)
+            const text = yield* inlineFields.strip(candidate.body.slice(0, taskTag))
+            const task = parseTaskLineWithFields(candidate.marker, candidate.body, sourcePath, index + 1, fields, text)
             if (task !== undefined) {
               tasks.push(task)
             }
@@ -51,37 +57,7 @@ const taskLinePattern = /^\s*-\s+\[([ xX])\]\s+(.*)$/
 const tagPattern = /#[A-Za-z0-9/_-]+/g
 const knownFields = new Set(["scheduled", "due", "completed", "depends", "repeat", "area", "project"])
 
-export const parseTaskLine = (line: string, path: string, lineNumber: number): Option.Option<ParsedTask> => {
-  const candidate = taskLineCandidate(line)
-  if (candidate === undefined) {
-    return Option.none()
-  }
-
-  const task = parseTaskLineWithFields(
-    candidate.marker,
-    candidate.body,
-    path,
-    lineNumber,
-    extractInlineFieldsFromText(candidate.body)
-  )
-  return task === undefined ? Option.none() : Option.some(task)
-}
-
-export const parseTasksFromMarkdown = (markdown: string, path: string): ReadonlyArray<ParsedTask> => {
-  const tasks: Array<ParsedTask> = []
-  const lines = Str.split(markdown, /\r?\n/)
-
-  for (let index = 0; index < lines.length; index += 1) {
-    const task = parseTaskLine(lines[index] ?? "", path, index + 1)
-    if (Option.isSome(task)) {
-      tasks.push(task.value)
-    }
-  }
-
-  return tasks
-}
-
-export const extractTags = (input: string): ReadonlyArray<string> => {
+const extractTags = (input: string): ReadonlyArray<string> => {
   const tags: Array<string> = []
   for (const match of input.matchAll(tagPattern)) {
     const tag = match[0]
@@ -92,7 +68,7 @@ export const extractTags = (input: string): ReadonlyArray<string> => {
   return tags
 }
 
-export const isIsoDate = (value: string): value is IsoDate => {
+const isIsoDate = (value: string): value is IsoDate => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     return false
   }
@@ -126,7 +102,8 @@ const parseTaskLineWithFields = (
   body: string,
   path: string,
   lineNumber: number,
-  fields: Readonly<Record<string, string>>
+  fields: Readonly<Record<string, string>>,
+  text: string
 ): ParsedTask | undefined => {
   const taskTag = body.indexOf("#task")
   if (taskTag === -1) {
@@ -142,7 +119,7 @@ const parseTaskLineWithFields = (
 
   return new ParsedTask({
     done: marker === "x" || marker === "X",
-    text: stripInlineFieldMarkup(body.slice(0, taskTag)),
+    text,
     source: new TaskSource({ path, lineNumber }),
     fields,
     unknownFields,

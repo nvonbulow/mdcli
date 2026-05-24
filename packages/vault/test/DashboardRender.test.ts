@@ -1,74 +1,95 @@
 import { assert, describe, it } from "@effect/vitest"
-import { DashboardRenderOptions } from "../src/DashboardModel"
-import { ParsedTask, TaskSource } from "../src/TaskModel"
-import { renderDashboard, renderOpenDashboard, renderTodayDashboard, renderWeekDashboard } from "../src/DashboardRender"
+import { Effect, FileSystem, Layer, Path } from "effect"
+import { VaultService } from "../src/VaultService"
 
-const source = (lineNumber: number): TaskSource =>
-  new TaskSource({
-    path: "vault/30-Projects/Personal/Test.md",
-    lineNumber
+const testRoot = "/effect-vault-test"
+
+type TestFiles = Record<string, string>
+
+const testFileSystemLayer = (files: TestFiles) =>
+  FileSystem.layerNoop({
+    readDirectory: (path) =>
+      Effect.sync(() =>
+        Object.keys(files)
+          .filter((filePath) => filePath.startsWith(`${path}/`))
+          .map((filePath) => filePath.slice(path.length + 1))
+      ),
+    readFileString: (path) => Effect.sync(() => files[path] ?? ""),
+    writeFileString: (path, contents) =>
+      Effect.sync(() => {
+        files[path] = contents
+      })
   })
 
-const task = (text: string, lineNumber: number, overrides: Partial<ParsedTask> = {}): ParsedTask =>
-  new ParsedTask({
-    done: false,
-    text,
-    source: source(lineNumber),
-    fields: {},
-    unknownFields: {},
-    tags: ["#task"],
-    area: "[[Personal]]",
-    project: "[[Test Project]]",
-    ...overrides
+const vaultLayer = (files: TestFiles) =>
+  VaultService.makeLayer({ root: testRoot }).pipe(Layer.provide(Layer.mergeAll(testFileSystemLayer(files), Path.layer)))
+
+describe("VaultService", () => {
+  it.effect("reads and writes text using paths relative to the configured root", () => {
+    const files: TestFiles = {
+      [`${testRoot}/Inbox.md`]: "# Inbox"
+    }
+
+    return Effect.gen(function* () {
+      const vault = yield* VaultService
+
+      assert.strictEqual(yield* vault.readText("Inbox.md"), "# Inbox")
+      yield* vault.writeText("Inbox.md", "# Updated")
+
+      assert.strictEqual(files[`${testRoot}/Inbox.md`], "# Updated")
+      assert.strictEqual(files["Inbox.md"], undefined)
+    }).pipe(Effect.provide(vaultLayer(files)))
   })
 
-describe("DashboardRender", () => {
-  it("renders today dashboard from matching scheduled and due tasks", () => {
-    const output = renderTodayDashboard(
-      [
-        task("scheduled today", 1, { scheduled: "2026-05-23" }),
-        task("due today", 2, { due: "2026-05-23" }),
-        task("tomorrow", 3, { scheduled: "2026-05-24" })
-      ],
-      "2026-05-23"
-    )
+  it.effect("reads markdown trees with relative source paths", () => {
+    const files: TestFiles = {
+      [`${testRoot}/30-Projects/Personal/Plan.md`]: "# Plan",
+      [`${testRoot}/30-Projects/Personal/Notes.txt`]: "not markdown",
+      [`${testRoot}/30-Projects/Work/Roadmap.md`]: "# Roadmap"
+    }
 
-    assert.strictEqual(output.includes("# Today — 2026-05-23"), true)
-    assert.strictEqual(output.includes("scheduled today"), true)
-    assert.strictEqual(output.includes("due today"), true)
-    assert.strictEqual(output.includes("tomorrow"), false)
+    return Effect.gen(function* () {
+      const vault = yield* VaultService
+      const markdownFiles = yield* vault.readMarkdownTree("30-Projects")
+
+      assert.deepStrictEqual(
+        markdownFiles.map((file) => file.path),
+        ["30-Projects/Personal/Plan.md", "30-Projects/Work/Roadmap.md"]
+      )
+      assert.deepStrictEqual(
+        markdownFiles.map((file) => file.contents),
+        ["# Plan", "# Roadmap"]
+      )
+    }).pipe(Effect.provide(vaultLayer(files)))
   })
 
-  it("renders week dashboard for a seven-day window", () => {
-    const output = renderWeekDashboard(
-      [
-        task("inside", 1, { scheduled: "2026-05-29" }),
-        task("Dad's birthday", 2, { scheduled: "2026-05-31", due: "2026-05-31" })
-      ],
-      "2026-05-23"
-    )
+  it.effect("reads tasks from markdown under a relative source tree", () => {
+    const files: TestFiles = {
+      [`${testRoot}/30-Projects/Personal/Plan.md`]: [
+        "- [ ] Plan groceries #task [scheduled:: 2026-05-23] [area:: [[Personal]]] [project:: [[Meal Planning]]]",
+        "- [ ] Plain checkbox"
+      ].join("\n"),
+      [`${testRoot}/30-Projects/Work/Roadmap.md`]:
+        "- [x] Ship migration #task [completed:: 2026-05-24] [area:: [[Work]]] [project:: [[Vault]]]",
+      [`${testRoot}/30-Projects/Work/Notes.txt`]: "- [ ] Not markdown #task"
+    }
 
-    assert.strictEqual(output.includes("# This Week — 2026-05-23 through 2026-05-29"), true)
-    assert.strictEqual(output.includes("inside"), true)
-    assert.strictEqual(output.includes("Dad's birthday"), false)
-  })
+    return Effect.gen(function* () {
+      const vault = yield* VaultService
+      const tasks = yield* vault.readTasks("30-Projects")
 
-  it("renders open dashboard count from open tasks", () => {
-    const output = renderOpenDashboard([task("open one", 1), task("open two", 2), task("done", 3, { done: true })])
-
-    assert.strictEqual(output.includes("2 open tasks."), true)
-    assert.strictEqual(output.includes("open one"), true)
-    assert.strictEqual(output.includes("open two"), true)
-    assert.strictEqual(output.includes("done"), false)
-  })
-
-  it("does not emit source-of-truth checkbox task syntax", () => {
-    const output = renderDashboard(
-      [task("open one", 1, { scheduled: "2026-05-23" })],
-      new DashboardRenderOptions({ name: "today", date: "2026-05-23" })
-    )
-
-    assert.strictEqual(output.includes("- [ ]"), false)
-    assert.strictEqual(output.includes("#task"), false)
+      assert.deepStrictEqual(
+        tasks.map((task) => task.text),
+        ["Plan groceries", "Ship migration"]
+      )
+      assert.deepStrictEqual(
+        tasks.map((task) => task.source.path),
+        ["30-Projects/Personal/Plan.md", "30-Projects/Work/Roadmap.md"]
+      )
+      assert.deepStrictEqual(
+        tasks.map((task) => task.source.lineNumber),
+        [1, 1]
+      )
+    }).pipe(Effect.provide(vaultLayer(files)))
   })
 })

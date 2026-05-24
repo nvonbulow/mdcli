@@ -31,8 +31,6 @@ export class DataviewParser extends Context.Service<DataviewParser, DataviewPars
 
 const parse = Effect.fn("DataviewParser.parse")((input: string) => parseQuery(input))
 
-export const parseDataviewQuery = parse
-
 const parseQuery = (input: string): Effect.Effect<DataviewTaskQuery, DataviewParseError> => {
   const lines = queryLines(input)
   const kind = lines[0]

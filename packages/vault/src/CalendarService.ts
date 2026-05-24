@@ -22,19 +22,15 @@ export class CalendarService extends Context.Service<CalendarService, CalendarSe
     Layer.effect(CalendarService, makeCalendarService(Effect.succeed(date)))
 }
 
-export const calendarLayerLive = CalendarService.layerLive
-export const calendarLayerTest = CalendarService.layerTest
-
-export const weekWindow = (start: IsoDate): WeekWindow => makeWindow(start, 7)
 const makeWindow = (start: IsoDate, days: number): WeekWindow =>
   new WeekWindow({ start, end: addDays(start, days - 1) })
 
-export function isoDateFromEpochMillis(millis: number): IsoDate {
+function isoDateFromEpochMillis(millis: number): IsoDate {
   const days = Math.floor(millis / 86_400_000)
   return isoDateFromEpochDay(days)
 }
 
-export const addDays = (date: IsoDate, days: number): IsoDate => {
+const addDays = (date: IsoDate, days: number): IsoDate => {
   let year = Number(date.slice(0, 4))
   let month = Number(date.slice(5, 7))
   let day = Number(date.slice(8, 10)) + days

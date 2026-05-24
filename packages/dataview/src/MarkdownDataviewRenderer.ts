@@ -61,6 +61,19 @@ const renderPart = (
     case "Markdown":
       return Effect.succeed(part.text)
     case "DataviewFence":
-      return program.run(part.query).pipe(Effect.flatMap(renderer.render))
+      return program.run(part.query).pipe(
+        Effect.flatMap(renderer.render),
+        Effect.map((rendered) => (rendered.endsWith("\n") ? rendered : rendered + trailingLineEnding(part.raw)))
+      )
   }
+}
+
+const trailingLineEnding = (raw: string): string => {
+  if (raw.endsWith("\r\n")) {
+    return "\r\n"
+  }
+  if (raw.endsWith("\n")) {
+    return "\n"
+  }
+  return ""
 }

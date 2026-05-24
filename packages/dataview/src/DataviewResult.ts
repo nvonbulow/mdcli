@@ -38,10 +38,3 @@ export type DataviewResult = Data.TaggedEnum<{
   }
 }>
 export const DataviewResult = Data.taggedEnum<DataviewResult>()
-
-export const recordsFromResult = (result: DataviewResult): ReadonlyArray<DataviewRecord> => {
-  switch (result._tag) {
-    case "QueryResult":
-      return result.rows.map((row) => row.record)
-  }
-}

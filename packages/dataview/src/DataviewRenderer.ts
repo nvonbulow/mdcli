@@ -33,22 +33,11 @@ export class DataviewRenderer extends Context.Service<DataviewRenderer, Dataview
   }
 }
 
-export function renderDataviewResult(result: DataviewResult, format: OutputFormat): string {
-  switch (format) {
-    case "json":
-      return renderJson(result)
-    case "markdown":
-      return renderMarkdownTable(result)
-    case "pretty":
-      return renderPrettyTable(result)
-  }
-}
-
-export function renderJson(result: DataviewResult): string {
+function renderJson(result: DataviewResult): string {
   return JSON.stringify(resultEnvelope(result), null, 2)
 }
 
-export function renderMarkdownTable(result: DataviewResult): string {
+function renderMarkdownTable(result: DataviewResult): string {
   const table = tableParts(result)
   if (table.columns.length === 0) {
     return "No rows found."
@@ -62,7 +51,7 @@ export function renderMarkdownTable(result: DataviewResult): string {
   ].join("\n")
 }
 
-export function renderPrettyTable(result: DataviewResult): string {
+function renderPrettyTable(result: DataviewResult): string {
   const table = tableParts(result)
   if (table.columns.length === 0 || table.rows.length === 0) {
     return "No rows found."

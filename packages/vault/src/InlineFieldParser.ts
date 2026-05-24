@@ -6,20 +6,28 @@ import type { TaskParseError } from "./VaultErrors"
 
 export type InlineFieldParserService = {
   readonly parse: (lineText: string) => Effect.Effect<Readonly<Record<string, string>>, TaskParseError>
+  readonly strip: (lineText: string) => Effect.Effect<string, TaskParseError>
 }
 const fieldStartPattern = /^([A-Za-z][A-Za-z0-9_-]*)::\s*/
 
-export const parse = Effect.fn("InlineFieldParser.parse")(function* (lineText: string) {
+const parse = Effect.fn("InlineFieldParser.parse")(function* (lineText: string) {
   return extractInlineFieldsFromText(lineText)
+})
+
+const strip = Effect.fn("InlineFieldParser.strip")(function* (lineText: string) {
+  return stripInlineFieldMarkup(lineText)
 })
 
 export class InlineFieldParser extends Context.Service<InlineFieldParser, InlineFieldParserService>()(
   "@kb/vault/InlineFieldParser"
 ) {
-  static readonly layerNoDeps: Layer.Layer<InlineFieldParser> = Layer.effect(this, Effect.succeed(this.of({ parse })))
+  static readonly layerNoDeps: Layer.Layer<InlineFieldParser> = Layer.effect(
+    this,
+    Effect.succeed(this.of({ parse, strip }))
+  )
 }
 
-export const extractInlineFieldsFromText = (input: string): Readonly<Record<string, string>> => {
+const extractInlineFieldsFromText = (input: string): Readonly<Record<string, string>> => {
   const fields: Record<string, string> = {}
   let cursor = 0
 
@@ -50,7 +58,7 @@ export const extractInlineFieldsFromText = (input: string): Readonly<Record<stri
   return fields
 }
 
-export const stripInlineFieldMarkup = (input: string): string => {
+const stripInlineFieldMarkup = (input: string): string => {
   let output = ""
   let cursor = 0
 

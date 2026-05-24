@@ -1,14 +1,36 @@
 #!/usr/bin/env -S tsx
 import { NodeRuntime, NodeServices } from "@effect/platform-node"
+import {
+  DataviewEvaluator,
+  DataviewFunctionRegistry,
+  DataviewParser,
+  DataviewProgram,
+  DataviewRecordSource,
+  MarkdownDataviewRenderer,
+  MarkdownFenceParser
+} from "@kb/dataview"
+import { CalendarService, TaskValidator, VaultService } from "@kb/vault"
 import { Effect } from "effect"
 import { Command } from "effect/unstable/cli"
-import { DashboardCommand } from "./dashboard/DashboardCommand"
-import { QueryCommand } from "./query/QueryCommand"
-import { TaskCommand } from "./task/TaskCommand"
+import { DashboardCommand } from "./DashboardCommand"
+import { rendererLayerForFormat } from "./OutputFormat"
+import { QueryCommand } from "./QueryCommand"
+import { KbRoot } from "./RootCommand"
+import { TaskCommand } from "./TaskCommand"
 
-const KbCommand = Command.make("kb").pipe(
-  Command.withDescription("Knowledge-base command line tools"),
-  Command.withSubcommands([TaskCommand, DashboardCommand, QueryCommand])
+const KbCommand = KbRoot.pipe(
+  Command.withSubcommands([TaskCommand, DashboardCommand, QueryCommand]),
+  Command.provide(MarkdownDataviewRenderer.layerNoDeps),
+  Command.provide(DataviewProgram.layerNoDeps),
+  Command.provide(DataviewParser.layerNoDeps),
+  Command.provide(DataviewRecordSource.layerNoDeps),
+  Command.provide(DataviewEvaluator.layerNoDeps),
+  Command.provide(DataviewFunctionRegistry.layerNoDeps),
+  Command.provide(MarkdownFenceParser.layerNoDeps),
+  Command.provide(CalendarService.layerLive),
+  Command.provide(TaskValidator.layerLive),
+  Command.provide((flags) => VaultService.makeLayer({ root: flags.vault })),
+  Command.provide((flags) => rendererLayerForFormat(flags.format))
 )
 
 const program = KbCommand.pipe(Command.run({ version: "0.1.0" }))

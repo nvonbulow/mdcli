@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest"
-import { Chunk, Effect, FileSystem, Layer, Path, Trie } from "effect"
+import { Chunk, Effect, FileSystem, Layer, Path, Result, Trie } from "effect"
 import { Markdown } from "../src/markdown/Markdown"
 import { VaultService } from "../src/VaultService"
 
@@ -53,6 +53,7 @@ describe("VaultService", () => {
       const vault = yield* VaultService
       const tree = yield* vault.readMarkdownTree("30-Projects")
       const entries = Array.from(Trie.entries(tree.files))
+      const files = entries.map(([, result]) => Result.getOrThrow(result))
 
       assert.strictEqual(tree.root, "30-Projects")
       assert.deepStrictEqual(
@@ -60,11 +61,11 @@ describe("VaultService", () => {
         ["30-Projects/Personal/Plan.md", "30-Projects/Work/Roadmap.md"]
       )
       assert.deepStrictEqual(
-        entries.map(([, file]) => file.path),
+        files.map((file) => file.path),
         ["30-Projects/Personal/Plan.md", "30-Projects/Work/Roadmap.md"]
       )
       assert.deepStrictEqual(
-        entries.map(([, file]) => file.contents),
+        files.map((file) => file.contents),
         ["# Plan", "# Roadmap"]
       )
     }).pipe(Effect.provide(vaultLayer(files)))

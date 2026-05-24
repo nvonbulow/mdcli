@@ -1,6 +1,8 @@
 import { assert, describe, it } from "@effect/vitest"
-import { Chunk, Effect, FileSystem, Layer, Path } from "effect"
+import { Chunk, Effect, FileSystem, Layer, Path, Result, Trie } from "effect"
 import { CatalogService } from "../src/CatalogService"
+import { MarkdownFile } from "../src/markdown/MarkdownModel"
+import { MarkdownParseError } from "../src/VaultErrors"
 import { VaultService } from "../src/VaultService"
 const testRoot = "/effect-catalog-test"
 const toArray = <A>(chunk: Chunk.Chunk<A>): ReadonlyArray<A> => Chunk.toReadonlyArray(chunk)
@@ -151,6 +153,66 @@ describe("CatalogService", () => {
       }).pipe(Effect.provide(catalogLayer(state)))
     }
   )
+
+  it.effect("keeps good files cataloged when another tree entry contains a parse failure diagnostic", () => {
+    const goodFile = new MarkdownFile({
+      path: "Notes/Good.md",
+      contents: "# Good Note #keep",
+      mdast: {
+        type: "root",
+        children: [
+          {
+            type: "heading",
+            depth: 1,
+            children: [{ type: "text", value: "Good Note #keep" }]
+          }
+        ]
+      }
+    })
+    const parseFailure = new MarkdownParseError({ message: "bad markdown", input: "!!!" })
+    const vault = VaultService.of({
+      readText: () => Effect.succeed(""),
+      writeText: () => Effect.void,
+      readMarkdown: () => Effect.succeed(goodFile),
+      readMarkdownTree: (source) =>
+        Effect.succeed({
+          root: source,
+          files: Trie.fromIterable<Result.Result<MarkdownFile, MarkdownParseError>>([
+            ["Notes/Bad.md", Result.fail(parseFailure) as Result.Result<MarkdownFile, MarkdownParseError>] as const,
+            ["Notes/Good.md", Result.succeed(goodFile) as Result.Result<MarkdownFile, MarkdownParseError>] as const
+          ])
+        })
+    })
+    const layer = CatalogService.layer.pipe(Layer.provide(Layer.succeed(VaultService, vault)))
+
+    return Effect.gen(function* () {
+      const catalog = yield* CatalogService
+      const snapshot = yield* catalog.snapshot("Notes")
+      const notes = toArray(snapshot.notes)
+      const headings = toArray(snapshot.headings)
+      const tags = toArray(snapshot.tags)
+      const diagnostics = toArray(snapshot.diagnostics)
+
+      assert.deepStrictEqual(
+        notes.map((note) => note.path),
+        ["Notes/Good.md"]
+      )
+      assert.deepStrictEqual(
+        headings.map((heading) => [heading.path, heading.text]),
+        [["Notes/Good.md", "Good Note #keep"]]
+      )
+      assert.deepStrictEqual(
+        tags.map((tag) => [tag.path, tag.value]),
+        [["Notes/Good.md", "#keep"]]
+      )
+      assert.strictEqual(diagnostics.length, 1)
+      assert.strictEqual(diagnostics[0]?.path, "Notes/Bad.md")
+      assert.strictEqual(diagnostics[0]?.folder, "Notes")
+      assert.strictEqual(diagnostics[0]?.title, "Bad")
+      assert.strictEqual(diagnostics[0]?.message, "bad markdown")
+      assert.strictEqual(diagnostics[0]?.cause, parseFailure)
+    }).pipe(Effect.provide(layer))
+  })
 
   it.effect("lists records and searches path, title, task text, headings, links, and tags case-insensitively", () => {
     const state: TestFileSystemState = {

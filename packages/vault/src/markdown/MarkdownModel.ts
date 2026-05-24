@@ -1,4 +1,6 @@
 import { Chunk, Data, Trie } from "effect"
+import type { Result } from "effect"
+import type { MarkdownParseError } from "../VaultErrors"
 
 export class SourceSpan extends Data.Class<{
   readonly start: number
@@ -70,5 +72,5 @@ export class MarkdownFile extends Data.Class<{
 
 export type MarkdownTree = {
   readonly root: string
-  readonly files: Trie.Trie<MarkdownFile>
+  readonly files: Trie.Trie<Result.Result<MarkdownFile, MarkdownParseError>>
 }

@@ -1,4 +1,4 @@
-import { Cache, Context, Duration, Effect, Exit, FileSystem, Layer, Path, String as Str, Trie } from "effect"
+import { Cache, Context, Duration, Effect, Exit, FileSystem, Layer, Path, Result, String as Str, Trie } from "effect"
 import type { PlatformError } from "effect/PlatformError"
 import { MarkdownFile, type MarkdownTree } from "./markdown/MarkdownModel"
 import { MarkdownParser } from "./markdown/MarkdownParser"
@@ -9,7 +9,7 @@ type VaultServiceShape = {
   readonly readText: (path: string) => Effect.Effect<string, VaultIoError>
   readonly writeText: (path: string, contents: string) => Effect.Effect<void, VaultIoError>
   readonly readMarkdown: (path: string) => Effect.Effect<MarkdownFile, VaultIoError | MarkdownParseError>
-  readonly readMarkdownTree: (source: string) => Effect.Effect<MarkdownTree, VaultIoError | MarkdownParseError>
+  readonly readMarkdownTree: (source: string) => Effect.Effect<MarkdownTree, VaultIoError>
 }
 
 export class VaultService extends Context.Service<VaultService, VaultServiceShape>()("@kb/vault/VaultService") {
@@ -30,16 +30,23 @@ const makeVaultService = (root: string) =>
       return yield* mapIoError("readText", normalizedPath, fs.readFileString(fullPath))
     })
 
-    const markdownCache = yield* Cache.makeWith<string, MarkdownFile, VaultIoError | MarkdownParseError>(
+    const markdownCache = yield* Cache.makeWith<string, Result.Result<MarkdownFile, MarkdownParseError>, VaultIoError>(
       (path) =>
         Effect.gen(function* () {
           const contents = yield* readText(path)
-          const parsed = yield* parser.parse(contents)
-          return new MarkdownFile({
-            path,
-            contents: parsed.contents,
-            mdast: parsed.mdast
-          })
+          return yield* parser.parse(contents).pipe(
+            Effect.match({
+              onFailure: Result.fail,
+              onSuccess: (parsed) =>
+                Result.succeed(
+                  new MarkdownFile({
+                    path,
+                    contents: parsed.contents,
+                    mdast: parsed.mdast
+                  })
+                )
+            })
+          )
         }),
       {
         capacity: Number.MAX_SAFE_INTEGER,
@@ -49,7 +56,11 @@ const makeVaultService = (root: string) =>
 
     const readMarkdown = Effect.fn("VaultService.readMarkdown")(function* (path: string) {
       const normalizedPath = normalizePath(path)
-      return yield* Cache.get(markdownCache, normalizedPath)
+      const cached = yield* Cache.get(markdownCache, normalizedPath)
+      if (Result.isFailure(cached)) {
+        return yield* Effect.fail(cached.failure)
+      }
+      return cached.success
     })
 
     const writeText = Effect.fn("VaultService.writeText")(function* (path: string, contents: string) {
@@ -71,7 +82,7 @@ const makeVaultService = (root: string) =>
 
       const files = yield* Effect.forEach(markdownFiles, (entry) => {
         const sourcePath = normalizePath(pathService.join(normalizedSource, entry))
-        return readMarkdown(sourcePath).pipe(Effect.map((file) => [sourcePath, file] as const))
+        return Cache.get(markdownCache, sourcePath).pipe(Effect.map((file) => [sourcePath, file] as const))
       })
 
       return {

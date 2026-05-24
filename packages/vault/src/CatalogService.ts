@@ -1,4 +1,4 @@
-import { Chunk, Context, Effect, Layer, String as Str, Trie } from "effect"
+import { Chunk, Context, Effect, Layer, Result, String as Str, Trie } from "effect"
 import { Markdown } from "./markdown/Markdown"
 import { MarkdownFile } from "./markdown/MarkdownModel"
 import type {
@@ -28,7 +28,7 @@ import type {
   CatalogTaskRecord
 } from "./CatalogModel"
 
-type CatalogServiceError = MarkdownParseError | VaultIoError
+type CatalogServiceError = VaultIoError
 
 export type CatalogServiceShape = {
   readonly snapshot: (source: string) => Effect.Effect<CatalogSnapshot, CatalogServiceError>
@@ -55,8 +55,8 @@ function makeCatalogService() {
     const vault = yield* VaultService
     const snapshot = Effect.fn("CatalogService.snapshot")(function* (source: string) {
       const tree = yield* vault.readMarkdownTree(source)
-      const cataloged = Chunk.map(Chunk.fromIterable(Trie.entries(tree.files)), ([path, file]) =>
-        catalogParsedFile(path, file)
+      const cataloged = Chunk.map(Chunk.fromIterable(Trie.entries(tree.files)), ([path, result]) =>
+        Result.isSuccess(result) ? catalogParsedFile(path, result.success) : catalogParseFailure(path, result.failure)
       )
 
       return snapshotFromCatalogedFiles(source, cataloged)
@@ -133,6 +133,25 @@ const catalogParsedFile = (path: string, file: MarkdownFile): CatalogedFile => {
     tasks,
     fencedBlocks,
     diagnostics: Chunk.empty()
+  }
+}
+const catalogParseFailure = (path: string, cause: MarkdownParseError): CatalogedFile => {
+  const source = sourceFromPath(path)
+  return {
+    frontmatter: Chunk.empty(),
+    headings: Chunk.empty(),
+    links: Chunk.empty(),
+    tags: Chunk.empty(),
+    listItems: Chunk.empty(),
+    tasks: Chunk.empty(),
+    fencedBlocks: Chunk.empty(),
+    diagnostics: Chunk.of({
+      path: source.path,
+      folder: source.folder,
+      title: source.title,
+      message: cause.message,
+      cause
+    })
   }
 }
 const snapshotFromCatalogedFiles = (source: string, files: Chunk.Chunk<CatalogedFile>): CatalogSnapshot => ({

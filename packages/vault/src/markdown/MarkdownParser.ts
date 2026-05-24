@@ -17,24 +17,24 @@ export type MarkdownParserService = {
 export class MarkdownParser extends Context.Service<MarkdownParser, MarkdownParserService>()(
   "@kb/vault/markdown/MarkdownParser"
 ) {
-  static readonly layerNoDeps: Layer.Layer<MarkdownParser> = Layer.effect(
-    this,
-    Effect.sync(() => makeMarkdownParser())
-  )
+  static readonly layerNoDeps: Layer.Layer<MarkdownParser> = Layer.succeed(this, makeMarkdownParser())
 
   static readonly layer: Layer.Layer<MarkdownParser> = this.layerNoDeps
 }
 
-const makeMarkdownParser = (): MarkdownParserService => {
+function makeMarkdownParser(): MarkdownParserService {
   const processor = unified().use(remarkParse).use(remarkGfm).use(remarkFrontmatter, ["yaml"]).use(remarkObsidian)
 
   const parse = Effect.fn("MarkdownParser.parse")((markdown: string) =>
-    Effect.try({
+    Effect.tryPromise({
       try: () =>
-        new MarkdownFile({
-          contents: markdown,
-          mdast: processor.runSync(processor.parse(markdown)) as Root
-        }),
+        processor.run(processor.parse(markdown)).then(
+          (mdast) =>
+            new MarkdownFile({
+              contents: markdown,
+              mdast: mdast as Root
+            })
+        ),
       catch: (cause) =>
         new MarkdownParseError({
           message: messageFromCause(cause),

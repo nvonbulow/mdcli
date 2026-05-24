@@ -144,7 +144,7 @@ const collectListItems = (root: Root & MarkdownNode): ReadonlyArray<MarkdownList
       const item = node as MarkdownNode & { readonly checked?: boolean | null }
       items.push(
         new MarkdownListItem({
-          text: nodeTextWithoutNestedLists(item),
+          text: listItemText(item),
           ...optionalChecked(item.checked),
           ...optionalSpan(nodeSpan(item))
         })
@@ -163,7 +163,7 @@ const collectTasks = (root: Root & MarkdownNode): ReadonlyArray<MarkdownTask> =>
         tasks.push(
           new MarkdownTask({
             done: item.checked,
-            text: nodeTextWithoutNestedLists(item),
+            text: listItemText(item),
             fields: collectInlineFieldsFromNode(item),
             tags: collectTagsFromNode(item),
             ...optionalSpan(nodeSpan(item))
@@ -248,6 +248,28 @@ const nodeText = (node: unknown): string => {
     text = text + nodeText(child)
   }
   return text
+}
+
+const listItemText = (node: unknown): string => {
+  const markdownNode = toMarkdownNode(node)
+  const children = markdownNode.children
+  if (children === undefined) {
+    return nodeTextWithoutNestedLists(markdownNode)
+  }
+  for (const child of children) {
+    if (child.type === "paragraph") {
+      return firstLine(nodeText(child))
+    }
+  }
+  return nodeTextWithoutNestedLists(markdownNode)
+}
+
+const firstLine = (text: string): string => {
+  const newline = text.indexOf("\n")
+  if (newline === -1) {
+    return text
+  }
+  return text.slice(0, newline)
 }
 
 const nodeTextWithoutNestedLists = (node: unknown): string => {

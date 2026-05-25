@@ -3,7 +3,7 @@ import type { Code, Heading, ListItem, Root, Yaml } from "mdast"
 import { Chunk } from "effect"
 import * as Effect from "effect/Effect"
 
-import { MarkdownFile } from "./MarkdownModel"
+import { MarkdownFile, type SourcePosition } from "./MarkdownModel"
 import { MarkdownParser } from "./MarkdownParser"
 
 export const Markdown = {
@@ -12,15 +12,30 @@ export const Markdown = {
       const parser = yield* MarkdownParser
       return yield* parser.parse(markdown)
     }),
-  getFrontmatter: (file: MarkdownFile): Chunk.Chunk<Yaml> => Chunk.fromIterable(collectFrontmatter(rootOf(file))),
-  getHeadings: (file: MarkdownFile): Chunk.Chunk<Heading> => Chunk.fromIterable(collectHeadings(rootOf(file))),
-  getWikilinks: (file: MarkdownFile): Chunk.Chunk<ObsidianWikilink> =>
+  root: (file: MarkdownFile): Root & MarkdownNode => rootOf(file),
+  collect: <NodeType = MarkdownNode>(
+    fileOrNode: MarkdownFile | MarkdownNode,
+    type: string
+  ): Chunk.Chunk<NodeType> => Chunk.fromIterable(collectNodes<NodeType>(nodeOf(fileOrNode), type)),
+  visit: (fileOrNode: MarkdownFile | MarkdownNode, visitor: Visitor): void => visitNode(nodeOf(fileOrNode), visitor),
+  position: (nodeOrPosition: unknown): SourcePosition | undefined => positionOf(nodeOrPosition),
+  sourceLine: (file: MarkdownFile, nodeOrPosition: unknown): string | undefined => {
+    const position = positionOf(nodeOrPosition)
+    const line = position?.start.line
+    if (line === undefined) {
+      return undefined
+    }
+    return sourceLine(file.contents, line)
+  },
+  frontmatter: (file: MarkdownFile): Chunk.Chunk<Yaml> => typedNodes<Yaml>(file, "yaml"),
+  headings: (file: MarkdownFile): Chunk.Chunk<Heading> => typedNodes<Heading>(file, "heading"),
+  wikilinks: (file: MarkdownFile): Chunk.Chunk<ObsidianWikilink> =>
     Chunk.fromIterable(collectWikilinks(rootOf(file))),
-  getListItems: (file: MarkdownFile): Chunk.Chunk<ListItem> => Chunk.fromIterable(collectListItems(rootOf(file))),
-  getTasks: (file: MarkdownFile): Chunk.Chunk<ObsidianListItem> => Chunk.fromIterable(collectTasks(rootOf(file))),
-  getTags: (file: MarkdownFile): Chunk.Chunk<ObsidianTag> => Chunk.fromIterable(collectTags(rootOf(file))),
-  getFencedBlocks: (file: MarkdownFile): Chunk.Chunk<Code> => Chunk.fromIterable(collectFencedBlocks(rootOf(file))),
-  headingText: (node: Heading): string => nodeText(node),
+  tags: (file: MarkdownFile): Chunk.Chunk<ObsidianTag> => Chunk.fromIterable(collectTags(rootOf(file))),
+  listItems: (file: MarkdownFile): Chunk.Chunk<ListItem> => typedNodes<ListItem>(file, "listItem"),
+  tasks: (file: MarkdownFile): Chunk.Chunk<ObsidianListItem> => Chunk.fromIterable(collectTasks(rootOf(file))),
+  fencedBlocks: (file: MarkdownFile): Chunk.Chunk<Code> => typedNodes<Code>(file, "code"),
+  text: (node: unknown): string => nodeText(node),
   listItemText: (node: ListItem): string => listItemText(node),
   fencedBlockLanguage: (node: Code): string | undefined => node.lang ?? undefined,
   fencedBlockMeta: (node: Code): string | undefined => node.meta ?? undefined
@@ -28,6 +43,7 @@ export const Markdown = {
 
 type MarkdownNode = {
   readonly type: string
+  readonly position?: SourcePosition
   readonly children?: ReadonlyArray<MarkdownNode>
   readonly value?: unknown
   readonly data?: Record<string, unknown> & {
@@ -41,56 +57,57 @@ type Visitor = (node: MarkdownNode) => void
 
 const rootOf = (file: MarkdownFile): Root & MarkdownNode => file.mdast as Root & MarkdownNode
 
-const collectFrontmatter = (root: Root & MarkdownNode): ReadonlyArray<Yaml> => {
-  const frontmatter: Array<Yaml> = []
-  visit(root, (node) => {
-    if (node.type === "yaml") {
-      frontmatter.push(node as Yaml)
-    }
-  })
-  return frontmatter
-}
+const nodeOf = (fileOrNode: MarkdownFile | MarkdownNode): MarkdownNode =>
+  "mdast" in fileOrNode ? (fileOrNode.mdast as MarkdownNode) : fileOrNode
 
-const collectHeadings = (root: Root & MarkdownNode): ReadonlyArray<Heading> => {
-  const headings: Array<Heading> = []
-  visit(root, (node) => {
-    if (node.type === "heading") {
-      headings.push(node as unknown as Heading)
+const typedNodes = <NodeType>(file: MarkdownFile, type: string): Chunk.Chunk<NodeType> =>
+  Chunk.fromIterable(collectNodes<NodeType>(rootOf(file), type))
+
+const collectNodes = <NodeType>(node: MarkdownNode, type: string): ReadonlyArray<NodeType> => {
+  const found: Array<NodeType> = []
+  visitNode(node, (current) => {
+    if (current.type === type) {
+      found.push(current as NodeType)
     }
   })
-  return headings
+  return found
 }
 
 const collectWikilinks = (root: Root & MarkdownNode): ReadonlyArray<ObsidianWikilink> => {
   const wikilinks: Array<ObsidianWikilink> = []
-  const seen = new Set<string>()
-  visit(root, (node) => {
-    if (isWikilinkNode(node)) {
-      pushWikilink(wikilinks, seen, node as unknown as ObsidianWikilink)
+  visitNode(root, (node) => {
+    if (node.type === "obsidianWikilink") {
+      wikilinks.push(node as unknown as ObsidianWikilink)
     }
     const dataLinks = node.data?.obsidianWikilinks
     if (dataLinks !== undefined) {
       for (const link of dataLinks) {
-        pushWikilink(wikilinks, seen, link)
+        wikilinks.push(link)
       }
     }
   })
   return wikilinks
 }
 
-const collectListItems = (root: Root & MarkdownNode): ReadonlyArray<ListItem> => {
-  const items: Array<ListItem> = []
-  visit(root, (node) => {
-    if (node.type === "listItem") {
-      items.push(node as unknown as ListItem)
+const collectTags = (root: Root & MarkdownNode): ReadonlyArray<ObsidianTag> => {
+  const tags: Array<ObsidianTag> = []
+  visitNode(root, (node) => {
+    if (node.type === "obsidianTag") {
+      tags.push(node as unknown as ObsidianTag)
+    }
+    const dataTags = node.data?.obsidianTags
+    if (dataTags !== undefined) {
+      for (const tag of dataTags) {
+        tags.push(tag)
+      }
     }
   })
-  return items
+  return tags
 }
 
 const collectTasks = (root: Root & MarkdownNode): ReadonlyArray<ObsidianListItem> => {
   const tasks: Array<ObsidianListItem> = []
-  visit(root, (node) => {
+  visitNode(root, (node) => {
     if (node.type === "listItem") {
       const item = node as unknown as ObsidianListItem
       if (item.data?.obsidianTask !== undefined) {
@@ -101,48 +118,44 @@ const collectTasks = (root: Root & MarkdownNode): ReadonlyArray<ObsidianListItem
   return tasks
 }
 
-const collectTags = (root: Root & MarkdownNode): ReadonlyArray<ObsidianTag> => collectTagsFromNode(root)
-
-const collectFencedBlocks = (root: Root & MarkdownNode): ReadonlyArray<Code> => {
-  const blocks: Array<Code> = []
-  visit(root, (node) => {
-    if (node.type === "code") {
-      blocks.push(node as Code)
-    }
-  })
-  return blocks
-}
-
-const collectTagsFromNode = (node: unknown): ReadonlyArray<ObsidianTag> => {
-  const tags: Array<ObsidianTag> = []
-  const seen = new Set<string>()
-  visit(toMarkdownNode(node), (current) => {
-    if (isTagNode(current)) {
-      pushTag(tags, seen, current as unknown as ObsidianTag)
-    }
-    const dataTags = current.data?.obsidianTags
-    if (dataTags !== undefined) {
-      for (const tag of dataTags) {
-        pushTag(tags, seen, tag)
-      }
-    }
-  })
-  return tags
-}
-
-const visit = (node: MarkdownNode, visitor: Visitor): void => {
+const visitNode = (node: MarkdownNode, visitor: Visitor): void => {
   visitor(node)
   const children = node.children
   if (children === undefined) {
     return
   }
   for (const child of children) {
-    visit(child, visitor)
+    visitNode(child, visitor)
   }
 }
 
+const positionOf = (nodeOrPosition: unknown): SourcePosition | undefined => {
+  if (nodeOrPosition === undefined || nodeOrPosition === null || typeof nodeOrPosition !== "object") {
+    return undefined
+  }
+  const positioned = nodeOrPosition as Partial<SourcePosition> & { readonly position?: SourcePosition }
+  return "start" in positioned ? (positioned as SourcePosition) : positioned.position
+}
+
+const sourceLine = (contents: string, lineNumber: number): string | undefined => {
+  let currentLine = 1
+  let lineStart = 0
+  let index = 0
+  while (index < contents.length) {
+    if (contents.charCodeAt(index) === 10) {
+      if (currentLine === lineNumber) {
+        return contents.slice(lineStart, index)
+      }
+      currentLine += 1
+      lineStart = index + 1
+    }
+    index += 1
+  }
+  return currentLine === lineNumber ? contents.slice(lineStart) : undefined
+}
+
 const nodeText = (node: unknown): string => {
-  const markdownNode = toMarkdownNode(node)
+  const markdownNode = node as MarkdownNode
   const literal = markdownNode.value
   if (typeof literal === "string") {
     return literal
@@ -159,7 +172,7 @@ const nodeText = (node: unknown): string => {
 }
 
 const listItemText = (node: unknown): string => {
-  const markdownNode = toMarkdownNode(node)
+  const markdownNode = node as MarkdownNode
   const children = markdownNode.children
   if (children === undefined) {
     return nodeTextWithoutNestedLists(markdownNode)
@@ -181,7 +194,7 @@ const firstLine = (text: string): string => {
 }
 
 const nodeTextWithoutNestedLists = (node: unknown): string => {
-  const markdownNode = toMarkdownNode(node)
+  const markdownNode = node as MarkdownNode
   const literal = markdownNode.value
   if (typeof literal === "string") {
     return literal
@@ -197,39 +210,4 @@ const nodeTextWithoutNestedLists = (node: unknown): string => {
     }
   }
   return text
-}
-
-const pushWikilink = (wikilinks: Array<ObsidianWikilink>, seen: Set<string>, link: ObsidianWikilink): void => {
-  const key = link.original + ":" + positionKey(link.position)
-  if (seen.has(key)) {
-    return
-  }
-  seen.add(key)
-  wikilinks.push(link)
-}
-
-const pushTag = (tags: Array<ObsidianTag>, seen: Set<string>, tag: ObsidianTag): void => {
-  const key = tag.original + ":" + positionKey(tag.position)
-  if (seen.has(key)) {
-    return
-  }
-  seen.add(key)
-  tags.push(tag)
-}
-
-const isWikilinkNode = (node: MarkdownNode): boolean => node.type === "obsidianWikilink"
-const isTagNode = (node: MarkdownNode): boolean => node.type === "obsidianTag"
-const toMarkdownNode = (node: unknown): MarkdownNode => node as MarkdownNode
-
-const positionKey = (
-  position:
-    | {
-        readonly start: { readonly offset?: number | undefined }
-        readonly end: { readonly offset?: number | undefined }
-      }
-    | undefined
-): string => {
-  const start = position?.start.offset
-  const end = position?.end.offset
-  return typeof start === "number" && typeof end === "number" ? String(start) + "-" + String(end) : "none"
 }

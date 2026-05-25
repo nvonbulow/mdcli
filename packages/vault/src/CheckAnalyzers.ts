@@ -2,7 +2,7 @@ import { Chunk, Context, Effect, Layer, String as Str } from "effect"
 import { CheckContext, CheckFinding } from "./CheckModel"
 import { VaultService, type VaultServiceShape } from "./VaultService"
 import type { CheckServiceError } from "./CheckService"
-import type { VaultHeadingRecord } from "./Vault"
+import type { VaultHeadingRecord, VaultLinkRecord } from "./Vault"
 
 export type CheckAnalyzer = {
   readonly analyze: Effect.Effect<Chunk.Chunk<CheckFinding>, CheckServiceError, CheckContext>
@@ -28,6 +28,7 @@ const vaultDiagnostics = Effect.fn("VaultDiagnosticsCheckAnalyzer.analyze")(func
 const linkIntegrity = Effect.fn("LinkIntegrityCheckAnalyzer.analyze")(function* () {
   const context = yield* CheckContext
   let findings = Chunk.empty<CheckFinding>()
+  const seen = new Set<string>()
 
   const links = yield* context.vault.links()
   for (const link of links) {
@@ -41,6 +42,11 @@ const linkIntegrity = Effect.fn("LinkIntegrityCheckAnalyzer.analyze")(function* 
       link.target
     )
     if (matches.length === 0) {
+      const key = linkFindingKey(link, "error")
+      if (seen.has(key)) {
+        continue
+      }
+      seen.add(key)
       findings = Chunk.append(
         findings,
         new CheckFinding({
@@ -54,6 +60,11 @@ const linkIntegrity = Effect.fn("LinkIntegrityCheckAnalyzer.analyze")(function* 
         })
       )
     } else if (matches.length > 1) {
+      const key = linkFindingKey(link, "warning")
+      if (seen.has(key)) {
+        continue
+      }
+      seen.add(key)
       findings = Chunk.append(
         findings,
         new CheckFinding({
@@ -421,6 +432,15 @@ const sortedPaths = (paths: Chunk.Chunk<string>): ReadonlyArray<string> =>
   Array.from(new Set(Chunk.toReadonlyArray(paths))).sort(compareString)
 
 const compareString = (left: string, right: string): number => (left < right ? -1 : left > right ? 1 : 0)
+const linkFindingKey = (link: VaultLinkRecord, severity: "error" | "warning"): string =>
+  `${severity}\u0000${link.path}\u0000${link.target}\u0000${link.original}\u0000${sourcePositionKey(link.position)}`
+
+const sourcePositionKey = (position: VaultLinkRecord["position"]): string =>
+  position === undefined
+    ? ""
+    : `${position.start.line}:${position.start.column}:${position.start.offset ?? ""}-${position.end.line}:${position.end.column}:${
+        position.end.offset ?? ""
+      }`
 
 const firstDepthOneHeading = (
   headings: Chunk.Chunk<VaultHeadingRecord>,

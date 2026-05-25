@@ -13,6 +13,7 @@ const toArray = <A>(chunk: Chunk.Chunk<A>): ReadonlyArray<A> => Chunk.toReadonly
 type TestFileSystemState = {
   readonly files: Record<string, string>
   writes: number
+  reads: number
 }
 
 const escapeRegExp = (value: string): string => value.replace(/[.+^${}()|[\]\\]/g, "\\$&")
@@ -61,7 +62,11 @@ const testFileSystemLayer = (state: TestFileSystemState) =>
           .filter((filePath) => filePath.startsWith(`${path}/`))
           .map((filePath) => filePath.slice(path.length + 1))
       ),
-    readFileString: (path) => Effect.sync(() => state.files[path] ?? ""),
+    readFileString: (path) =>
+      Effect.sync(() => {
+        state.reads += 1
+        return state.files[path] ?? ""
+      }),
     writeFileString: (path, contents) =>
       Effect.sync(() => {
         state.writes += 1
@@ -91,7 +96,8 @@ describe("Vault", () => {
         ].join("\n"),
         [`${testRoot}/Notes/Runbook.md`]: "# Incident Guide #ops"
       },
-      writes: 0
+      writes: 0,
+      reads: 0
     }
 
     return Effect.gen(function* () {
@@ -126,6 +132,11 @@ describe("Vault", () => {
         [
           ["Notes/Search.md", "Work"],
           ["Notes/Search.md", "Runbook"],
+          ["Notes/Search.md", "Finance"],
+          ["Notes/Search.md", "Work"],
+          ["Notes/Search.md", "Runbook"],
+          ["Notes/Search.md", "Finance"],
+          ["Notes/Search.md", "Runbook"],
           ["Notes/Search.md", "Finance"]
         ]
       )
@@ -133,7 +144,11 @@ describe("Vault", () => {
         tags.map((tag) => [tag.path, tag.value]),
         [
           ["Notes/Runbook.md", "#ops"],
+          ["Notes/Runbook.md", "#ops"],
           ["Notes/Search.md", "#meeting"],
+          ["Notes/Search.md", "#meeting"],
+          ["Notes/Search.md", "#task"],
+          ["Notes/Search.md", "#task"],
           ["Notes/Search.md", "#task"]
         ]
       )
@@ -147,9 +162,43 @@ describe("Vault", () => {
       )
       assert.deepStrictEqual(
         finance.map((result) => [result._tag, result.path, result.text]),
-        [["Link", "Notes/Search.md", "Finance"]]
+        [
+          ["Link", "Notes/Search.md", "Finance"],
+          ["Link", "Notes/Search.md", "Finance"],
+          ["Link", "Notes/Search.md", "Finance"]
+        ]
       )
       assert.strictEqual(state.writes, 0)
+    }).pipe(Effect.provide(vaultLayer(state)))
+  })
+  it.effect("reuses cached projection inputs across repeated scoped facades", () => {
+    const state: TestFileSystemState = {
+      files: {
+        [`${testRoot}/Notes/Tasks.md`]: "# Tasks\n- [ ] Keep cached #task"
+      },
+      writes: 0,
+      reads: 0
+    }
+
+    return Effect.gen(function* () {
+      const vaultService = yield* VaultService
+      const firstVault = yield* vaultService.scoped(fromPath("Notes"))
+      const firstTasks = toArray(yield* firstVault.tasks())
+      const readsAfterFirstProjection = state.reads
+
+      const secondVault = yield* vaultService.scoped(fromPath("Notes"))
+      const secondTasks = toArray(yield* secondVault.tasks())
+
+      assert.deepStrictEqual(
+        firstTasks.map((task) => [task.path, task.text]),
+        [["Notes/Tasks.md", "Keep cached"]]
+      )
+      assert.deepStrictEqual(
+        secondTasks.map((task) => [task.path, task.text]),
+        [["Notes/Tasks.md", "Keep cached"]]
+      )
+      assert.strictEqual(readsAfterFirstProjection, 1)
+      assert.strictEqual(state.reads, readsAfterFirstProjection)
     }).pipe(Effect.provide(vaultLayer(state)))
   })
 

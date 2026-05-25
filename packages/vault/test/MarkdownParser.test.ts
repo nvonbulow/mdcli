@@ -56,7 +56,7 @@ describe("MarkdownParser", () => {
     Effect.gen(function* () {
       const file = yield* Markdown.parse(markdown)
 
-      const frontmatter = Chunk.toReadonlyArray(Markdown.getFrontmatter(file))
+      const frontmatter = Chunk.toReadonlyArray(Markdown.frontmatter(file))
 
       assert.strictEqual(frontmatter.length, 1)
       assert.strictEqual(frontmatter[0]?.value, "title: Vault\nstatus: active")
@@ -68,28 +68,46 @@ describe("MarkdownParser", () => {
   it.effect("derives headings, wikilinks, tags, list items, tasks, inline fields, and fenced blocks", () =>
     Effect.gen(function* () {
       const file = yield* Markdown.parse(markdown)
-      const headings = Chunk.toReadonlyArray(Markdown.getHeadings(file))
-      const wikilinks = Chunk.toReadonlyArray(Markdown.getWikilinks(file))
-      const tags = Chunk.toReadonlyArray(Markdown.getTags(file))
-      const listItems = Chunk.toReadonlyArray(Markdown.getListItems(file))
-      const tasks = Chunk.toReadonlyArray(Markdown.getTasks(file))
+      const headings = Chunk.toReadonlyArray(Markdown.headings(file))
+      const wikilinks = Chunk.toReadonlyArray(Markdown.wikilinks(file))
+      const tags = Chunk.toReadonlyArray(Markdown.tags(file))
+      const listItems = Chunk.toReadonlyArray(Markdown.listItems(file))
+      const tasks = Chunk.toReadonlyArray(Markdown.tasks(file))
       const fields = tasks.flatMap((task) => Array.from(task.data?.obsidianTask?.inlineFields ?? []))
-      const blocks = Chunk.toReadonlyArray(Markdown.getFencedBlocks(file))
+      const blocks = Chunk.toReadonlyArray(Markdown.fencedBlocks(file))
 
       assert.strictEqual(headings.length, 1)
       assert.strictEqual(headings[0]?.depth, 1)
-      assert.strictEqual(Markdown.headingText(headings[0]!), "Project Home page #top")
+      assert.strictEqual(Markdown.text(headings[0]!), "Project Home page #top")
 
-      assert.strictEqual(wikilinks.length, 2)
-      assert.strictEqual(wikilinks[0]?.target, "Home")
-      assert.strictEqual(wikilinks[0]?.heading, "Overview")
-      assert.strictEqual(wikilinks[0]?.alias, "Home page")
-      assert.strictEqual(wikilinks[0]?.original, "[[Home#Overview|Home page]]")
-      assert.strictEqual(wikilinks[1]?.block, "block-id")
+      assert.deepStrictEqual(
+        wikilinks.map((link) => [link.target, link.heading, link.alias, link.block, link.original]),
+        [
+          ["Home", "Overview", "Home page", undefined, "[[Home#Overview|Home page]]"],
+          ["Home", "Overview", "Home page", undefined, "[[Home#Overview|Home page]]"],
+          ["TaskNote", undefined, undefined, "block-id", "[[TaskNote#^block-id]]"],
+          ["TaskNote", undefined, undefined, "block-id", "[[TaskNote#^block-id]]"],
+          ["TaskNote", undefined, undefined, "block-id", "[[TaskNote#^block-id]]"]
+        ]
+      )
 
       assert.deepStrictEqual(
         tags.map((tag) => tag.value),
-        ["#top", "#note", "#task", "#done", "#plain"]
+        [
+          "#top",
+          "#top",
+          "#note",
+          "#note",
+          "#task",
+          "#task",
+          "#task",
+          "#done",
+          "#done",
+          "#done",
+          "#plain",
+          "#plain",
+          "#plain"
+        ]
       )
 
       assert.strictEqual(listItems.length, 3)

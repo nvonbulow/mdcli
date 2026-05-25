@@ -197,7 +197,7 @@ const checkContext = (
   scope: VaultScope,
   vault: VaultShape,
   selected: (path: string) => boolean
-): Effect.Effect<CheckContextShape> =>
+): Effect.Effect<CheckContextShape, VaultIoError> =>
   Effect.gen(function* () {
     return CheckContext.of({
       scope,
@@ -207,7 +207,7 @@ const checkContext = (
     })
   })
 
-const indexesFromVault = (vault: VaultShape): Effect.Effect<CheckIndexes> =>
+const indexesFromVault = (vault: VaultShape): Effect.Effect<CheckIndexes, VaultIoError> =>
   Effect.gen(function* () {
     const notes = yield* vault.notes()
     const headings = yield* vault.headings()

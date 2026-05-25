@@ -1,11 +1,10 @@
 import type { ObsidianListItem, ObsidianTag, ObsidianWikilink } from "@kb/remark-obsidian"
 import type { Code, Heading, ListItem, Yaml } from "mdast"
-import { Cache, Chunk, Context, Effect, Option, Result, String as Str, Trie } from "effect"
+import { Chunk, Context, Effect, Option, Result, String as Str, Trie } from "effect"
 import { Markdown } from "./markdown/Markdown"
 import { MarkdownFile, type MarkdownTree, type SourcePosition } from "./markdown/MarkdownModel"
-import { parsedTasksFromMarkdownFile } from "./TaskParser"
-import type { ParsedTask } from "./TaskModel"
-import type { MarkdownParseError } from "./VaultErrors"
+import { ParsedTask, Task, TaskSource } from "./TaskModel"
+import type { MarkdownParseError, VaultIoError } from "./VaultErrors"
 import { allMarkdown, VaultScope } from "./VaultScope"
 
 export type VaultRecord<Node> = {
@@ -79,104 +78,93 @@ export type VaultSearchResult =
 export type VaultShape = {
   readonly scope: VaultScope
   readonly tree: MarkdownTree
-  readonly notes: (scope?: VaultScope) => Effect.Effect<Chunk.Chunk<VaultNoteRecord>>
-  readonly frontmatter: (scope?: VaultScope) => Effect.Effect<Chunk.Chunk<VaultFrontmatterRecord>>
-  readonly headings: (scope?: VaultScope) => Effect.Effect<Chunk.Chunk<VaultHeadingRecord>>
-  readonly links: (scope?: VaultScope) => Effect.Effect<Chunk.Chunk<VaultLinkRecord>>
-  readonly tags: (scope?: VaultScope) => Effect.Effect<Chunk.Chunk<VaultTagRecord>>
-  readonly listItems: (scope?: VaultScope) => Effect.Effect<Chunk.Chunk<VaultListItemRecord>>
-  readonly tasks: (scope?: VaultScope) => Effect.Effect<Chunk.Chunk<VaultTaskRecord>>
-  readonly fencedBlocks: (scope?: VaultScope) => Effect.Effect<Chunk.Chunk<VaultFencedBlockRecord>>
-  readonly diagnostics: (scope?: VaultScope) => Effect.Effect<Chunk.Chunk<VaultDiagnostic>>
-  readonly search: (scope: VaultScope, query: string) => Effect.Effect<Chunk.Chunk<VaultSearchResult>>
+  readonly notes: (scope?: VaultScope) => Effect.Effect<Chunk.Chunk<VaultNoteRecord>, VaultIoError>
+  readonly frontmatter: (scope?: VaultScope) => Effect.Effect<Chunk.Chunk<VaultFrontmatterRecord>, VaultIoError>
+  readonly headings: (scope?: VaultScope) => Effect.Effect<Chunk.Chunk<VaultHeadingRecord>, VaultIoError>
+  readonly links: (scope?: VaultScope) => Effect.Effect<Chunk.Chunk<VaultLinkRecord>, VaultIoError>
+  readonly tags: (scope?: VaultScope) => Effect.Effect<Chunk.Chunk<VaultTagRecord>, VaultIoError>
+  readonly listItems: (scope?: VaultScope) => Effect.Effect<Chunk.Chunk<VaultListItemRecord>, VaultIoError>
+  readonly tasks: (scope?: VaultScope) => Effect.Effect<Chunk.Chunk<VaultTaskRecord>, VaultIoError>
+  readonly fencedBlocks: (scope?: VaultScope) => Effect.Effect<Chunk.Chunk<VaultFencedBlockRecord>, VaultIoError>
+  readonly diagnostics: (scope?: VaultScope) => Effect.Effect<Chunk.Chunk<VaultDiagnostic>, VaultIoError>
+  readonly search: (scope: VaultScope, query: string) => Effect.Effect<Chunk.Chunk<VaultSearchResult>, VaultIoError>
   readonly sourceLine: (path: string, line: number) => string | undefined
   readonly sourceExcerpt: (path: string, position: SourcePosition | undefined) => string | undefined
 }
 
+export type VaultProjectionMethods = Pick<
+  VaultShape,
+  | "notes"
+  | "frontmatter"
+  | "headings"
+  | "links"
+  | "tags"
+  | "listItems"
+  | "tasks"
+  | "fencedBlocks"
+  | "diagnostics"
+>
+
 export class Vault extends Context.Service<Vault, VaultShape>()("@kb/vault/Vault") {
   static make({
     scope = allMarkdown,
-    tree
+    tree,
+    projections
   }: {
     readonly scope?: VaultScope
     readonly tree: MarkdownTree
+    readonly projections?: VaultProjectionMethods
   }): Effect.Effect<VaultShape> {
-    return makeVault({ scope, tree })
+    return makeVault({ scope, tree, projections })
   }
 }
 
 const makeVault = ({
   scope,
-  tree
+  tree,
+  projections = projectionMethodsForTree(scope, tree)
 }: {
   readonly scope: VaultScope
   readonly tree: MarkdownTree
+  readonly projections?: VaultProjectionMethods | undefined
 }): Effect.Effect<VaultShape> =>
-  Effect.gen(function* () {
-    const frontmatterCache = yield* Cache.make({
-      capacity: Number.POSITIVE_INFINITY,
-      lookup: (key: string) => Effect.succeed(recordsForScope(tree, scopeFromKey(key), frontmatterRecordsForFile))
-    })
-    const headingCache = yield* Cache.make({
-      capacity: Number.POSITIVE_INFINITY,
-      lookup: (key: string) => Effect.succeed(recordsForScope(tree, scopeFromKey(key), headingRecordsForFile))
-    })
-    const linkCache = yield* Cache.make({
-      capacity: Number.POSITIVE_INFINITY,
-      lookup: (key: string) => Effect.succeed(recordsForScope(tree, scopeFromKey(key), linkRecordsForFile))
-    })
-    const tagCache = yield* Cache.make({
-      capacity: Number.POSITIVE_INFINITY,
-      lookup: (key: string) => Effect.succeed(recordsForScope(tree, scopeFromKey(key), tagRecordsForFile))
-    })
-    const listItemCache = yield* Cache.make({
-      capacity: Number.POSITIVE_INFINITY,
-      lookup: (key: string) => Effect.succeed(recordsForScope(tree, scopeFromKey(key), listItemRecordsForFile))
-    })
-    const taskCache = yield* Cache.make({
-      capacity: Number.POSITIVE_INFINITY,
-      lookup: (key: string) => Effect.succeed(recordsForScope(tree, scopeFromKey(key), taskRecordsForFile))
-    })
-    const fencedBlockCache = yield* Cache.make({
-      capacity: Number.POSITIVE_INFINITY,
-      lookup: (key: string) => Effect.succeed(recordsForScope(tree, scopeFromKey(key), fencedBlockRecordsForFile))
-    })
-    const diagnosticCache = yield* Cache.make({
-      capacity: Number.POSITIVE_INFINITY,
-      lookup: (key: string) => Effect.succeed(diagnosticsForScope(tree, scopeFromKey(key)))
-    })
-    const noteCache = yield* Cache.make({
-      capacity: Number.POSITIVE_INFINITY,
-      lookup: (key: string) => Effect.succeed(notesForScope(tree, scopeFromKey(key)))
-    })
-
-    const frontmatter = (narrowScope?: VaultScope) => Cache.get(frontmatterCache, scopeKey(narrowScope ?? scope))
-    const headings = (narrowScope?: VaultScope) => Cache.get(headingCache, scopeKey(narrowScope ?? scope))
-    const links = (narrowScope?: VaultScope) => Cache.get(linkCache, scopeKey(narrowScope ?? scope))
-    const tags = (narrowScope?: VaultScope) => Cache.get(tagCache, scopeKey(narrowScope ?? scope))
-    const listItems = (narrowScope?: VaultScope) => Cache.get(listItemCache, scopeKey(narrowScope ?? scope))
-    const tasks = (narrowScope?: VaultScope) => Cache.get(taskCache, scopeKey(narrowScope ?? scope))
-    const fencedBlocks = (narrowScope?: VaultScope) => Cache.get(fencedBlockCache, scopeKey(narrowScope ?? scope))
-    const diagnostics = (narrowScope?: VaultScope) => Cache.get(diagnosticCache, scopeKey(narrowScope ?? scope))
-    const notes = (narrowScope?: VaultScope) => Cache.get(noteCache, scopeKey(narrowScope ?? scope))
-
-    return Vault.of({
+  Effect.succeed(
+    Vault.of({
       scope,
       tree,
-      notes,
-      frontmatter,
-      headings,
-      links,
-      tags,
-      listItems,
-      tasks,
-      fencedBlocks,
-      diagnostics,
-      search: (narrowScope, query) => searchVault({ notes, tasks, headings, links, tags }, narrowScope, query),
+      notes: projections.notes,
+      frontmatter: projections.frontmatter,
+      headings: projections.headings,
+      links: projections.links,
+      tags: projections.tags,
+      listItems: projections.listItems,
+      tasks: projections.tasks,
+      fencedBlocks: projections.fencedBlocks,
+      diagnostics: projections.diagnostics,
+      search: (narrowScope, query) => searchVault(projections, narrowScope, query),
       sourceLine: (path, line) => sourceLine(fileContents(tree, path), line),
       sourceExcerpt: (path, position) => sourceLine(fileContents(tree, path), position?.start.line)
     })
-  })
+  )
+
+const projectionMethodsForTree = (scope: VaultScope, tree: MarkdownTree): VaultProjectionMethods => ({
+  notes: (narrowScope?: VaultScope) => Effect.succeed(notesForScope(tree, narrowScope ?? scope)),
+  frontmatter: (narrowScope?: VaultScope) =>
+    Effect.succeed(recordsForScope(tree, narrowScope ?? scope, frontmatterRecordsForFile)),
+  headings: (narrowScope?: VaultScope) =>
+    Effect.succeed(recordsForScope(tree, narrowScope ?? scope, headingRecordsForFile)),
+  links: (narrowScope?: VaultScope) =>
+    Effect.succeed(recordsForScope(tree, narrowScope ?? scope, linkRecordsForFile)),
+  tags: (narrowScope?: VaultScope) =>
+    Effect.succeed(recordsForScope(tree, narrowScope ?? scope, tagRecordsForFile)),
+  listItems: (narrowScope?: VaultScope) =>
+    Effect.succeed(recordsForScope(tree, narrowScope ?? scope, listItemRecordsForFile)),
+  tasks: (narrowScope?: VaultScope) =>
+    Effect.succeed(recordsForScope(tree, narrowScope ?? scope, taskRecordsForFile)),
+  fencedBlocks: (narrowScope?: VaultScope) =>
+    Effect.succeed(recordsForScope(tree, narrowScope ?? scope, fencedBlockRecordsForFile)),
+  diagnostics: (narrowScope?: VaultScope) => Effect.succeed(diagnosticsForScope(tree, narrowScope ?? scope))
+})
 
 const recordsForScope = <Record>(
   tree: MarkdownTree,
@@ -192,19 +180,14 @@ const recordsForScope = <Record>(
   return records
 }
 
-const notesForScope = (tree: MarkdownTree, scope: VaultScope): Chunk.Chunk<VaultNoteRecord> => {
-  let notes = Chunk.empty<VaultNoteRecord>()
-  for (const [path, result] of Trie.entries(tree.files)) {
-    if (pathMatchesScope(path, scope) && Result.isSuccess(result)) {
-      const file = markdownFileAtPath(path, result.success)
-      notes = Chunk.append(notes, {
-        path,
-        file
-      })
-    }
-  }
-  return notes
-}
+const notesForScope = (tree: MarkdownTree, scope: VaultScope): Chunk.Chunk<VaultNoteRecord> =>
+  recordsForScope(tree, scope, noteRecordsForFile)
+
+export const noteRecordsForFile = (path: string, file: MarkdownFile): Chunk.Chunk<VaultNoteRecord> =>
+  Chunk.of({
+    path,
+    file
+  })
 
 const diagnosticsForScope = (tree: MarkdownTree, scope: VaultScope): Chunk.Chunk<VaultDiagnostic> => {
   let diagnostics = Chunk.empty<VaultDiagnostic>()
@@ -216,28 +199,28 @@ const diagnosticsForScope = (tree: MarkdownTree, scope: VaultScope): Chunk.Chunk
   return diagnostics
 }
 
-const frontmatterRecordsForFile = (path: string, file: MarkdownFile): Chunk.Chunk<VaultFrontmatterRecord> =>
-  Chunk.map(Markdown.getFrontmatter(file), (node) => ({
+export const frontmatterRecordsForFile = (path: string, file: MarkdownFile): Chunk.Chunk<VaultFrontmatterRecord> =>
+  Chunk.map(Markdown.frontmatter(file), (node) => ({
     path,
     file,
     node,
     value: node.value,
     language: "yaml",
-    ...optionalPosition(node.position)
+    ...optionalPosition(Markdown.position(node))
   }))
 
-const headingRecordsForFile = (path: string, file: MarkdownFile): Chunk.Chunk<VaultHeadingRecord> =>
-  Chunk.map(Markdown.getHeadings(file), (node) => ({
+export const headingRecordsForFile = (path: string, file: MarkdownFile): Chunk.Chunk<VaultHeadingRecord> =>
+  Chunk.map(Markdown.headings(file), (node) => ({
     path,
     file,
     node,
     depth: node.depth,
-    text: Markdown.headingText(node),
-    ...optionalPosition(node.position)
+    text: Markdown.text(node),
+    ...optionalPosition(Markdown.position(node))
   }))
 
-const linkRecordsForFile = (path: string, file: MarkdownFile): Chunk.Chunk<VaultLinkRecord> =>
-  Chunk.map(Markdown.getWikilinks(file), (node) => ({
+export const linkRecordsForFile = (path: string, file: MarkdownFile): Chunk.Chunk<VaultLinkRecord> =>
+  Chunk.map(Markdown.wikilinks(file), (node) => ({
     path,
     file,
     node,
@@ -247,88 +230,95 @@ const linkRecordsForFile = (path: string, file: MarkdownFile): Chunk.Chunk<Vault
     ...optionalString("alias", node.alias),
     ...optionalString("heading", node.heading),
     ...optionalString("block", node.block),
-    ...optionalPosition(node.position)
+    ...optionalPosition(Markdown.position(node))
   }))
 
-const tagRecordsForFile = (path: string, file: MarkdownFile): Chunk.Chunk<VaultTagRecord> =>
-  Chunk.map(Markdown.getTags(file), (node) => ({
+export const tagRecordsForFile = (path: string, file: MarkdownFile): Chunk.Chunk<VaultTagRecord> =>
+  Chunk.map(Markdown.tags(file), (node) => ({
     path,
     file,
     node,
     value: node.value,
-    ...optionalPosition(node.position)
+    ...optionalPosition(Markdown.position(node))
   }))
 
-const listItemRecordsForFile = (path: string, file: MarkdownFile): Chunk.Chunk<VaultListItemRecord> =>
-  Chunk.map(Markdown.getListItems(file), (node) => ({
+export const listItemRecordsForFile = (path: string, file: MarkdownFile): Chunk.Chunk<VaultListItemRecord> =>
+  Chunk.map(Markdown.listItems(file), (node) => ({
     path,
     file,
     node,
     text: Markdown.listItemText(node),
     ...optionalChecked(node.checked),
-    ...optionalPosition(node.position)
+    ...optionalPosition(Markdown.position(node))
   }))
 
-const taskRecordsForFile = (path: string, file: MarkdownFile): Chunk.Chunk<VaultTaskRecord> => {
-  const tasks = parsedTasksFromMarkdownFile(file)
+export const taskRecordsForFile = (path: string, file: MarkdownFile): Chunk.Chunk<VaultTaskRecord> => {
   let records = Chunk.empty<VaultTaskRecord>()
-  for (const node of Markdown.getTasks(file)) {
-    const task = taskForNode(tasks, path, node)
-    if (task !== undefined) {
+  for (const node of Markdown.tasks(file)) {
+    const task = parsedTaskFromNode(path, node)
+    if (Option.isSome(task)) {
       records = Chunk.append(records, {
         path,
         file,
         node,
-        task,
-        done: task.done,
-        text: task.text,
-        fields: task.fields,
-        unknownFields: task.unknownFields,
-        tags: Chunk.fromIterable(task.tags),
-        ...optionalPosition(node.position)
+        task: task.value,
+        done: task.value.done,
+        text: task.value.text,
+        fields: task.value.fields,
+        unknownFields: task.value.unknownFields,
+        tags: Chunk.fromIterable(task.value.tags),
+        ...optionalPosition(Markdown.position(node))
       })
     }
   }
   return records
 }
 
-const fencedBlockRecordsForFile = (path: string, file: MarkdownFile): Chunk.Chunk<VaultFencedBlockRecord> =>
-  Chunk.map(Markdown.getFencedBlocks(file), (node) => ({
+export const fencedBlockRecordsForFile = (path: string, file: MarkdownFile): Chunk.Chunk<VaultFencedBlockRecord> =>
+  Chunk.map(Markdown.fencedBlocks(file), (node) => ({
     path,
     file,
     node,
     value: node.value,
     ...optionalString("language", Markdown.fencedBlockLanguage(node)),
     ...optionalString("meta", Markdown.fencedBlockMeta(node)),
-    ...optionalPosition(node.position)
+    ...optionalPosition(Markdown.position(node))
   }))
 
-const taskForNode = (tasks: Chunk.Chunk<ParsedTask>, path: string, node: ObsidianListItem): ParsedTask | undefined => {
-  const line = node.position?.start.line
-  for (const task of tasks) {
-    if (task.source.path === path && (line === undefined || task.source.lineNumber === line)) {
-      return task
-    }
-  }
-  return undefined
-}
+const parsedTaskFromNode = (path: string, node: ObsidianListItem): Option.Option<ParsedTask> =>
+  Option.map(Task.from(node), (task) => {
+    const position = Markdown.position(node)
+    return new ParsedTask({
+      done: task.done,
+      text: task.text,
+      source: new TaskSource({
+        path,
+        lineNumber: position?.start.line ?? 1,
+        ...optionalPosition(position)
+      }),
+      fields: task.fields,
+      unknownFields: task.unknownFields,
+      tags: task.tags,
+      ...optionalValue("scheduled", task.scheduled),
+      ...optionalValue("due", task.due),
+      ...optionalValue("completed", task.completed),
+      ...optionalValue("depends", task.depends),
+      ...optionalValue("repeat", task.repeat),
+      ...optionalValue("area", task.area),
+      ...optionalValue("project", task.project)
+    })
+  })
 
 const markdownFileAtPath = (path: string, file: MarkdownFile): MarkdownFile =>
   file.path === path ? file : new MarkdownFile({ path, contents: file.contents, mdast: file.mdast })
 
-type SearchSources = {
-  readonly notes: (scope?: VaultScope) => Effect.Effect<Chunk.Chunk<VaultNoteRecord>>
-  readonly tasks: (scope?: VaultScope) => Effect.Effect<Chunk.Chunk<VaultTaskRecord>>
-  readonly headings: (scope?: VaultScope) => Effect.Effect<Chunk.Chunk<VaultHeadingRecord>>
-  readonly links: (scope?: VaultScope) => Effect.Effect<Chunk.Chunk<VaultLinkRecord>>
-  readonly tags: (scope?: VaultScope) => Effect.Effect<Chunk.Chunk<VaultTagRecord>>
-}
+type SearchSources = Pick<VaultProjectionMethods, "notes" | "tasks" | "headings" | "links" | "tags">
 
 const searchVault = (
   sources: SearchSources,
   scope: VaultScope,
   query: string
-): Effect.Effect<Chunk.Chunk<VaultSearchResult>> =>
+): Effect.Effect<Chunk.Chunk<VaultSearchResult>, VaultIoError> =>
   Effect.gen(function* () {
     const needle = Str.toLowerCase(query)
     const results: Array<VaultSearchResult> = []
@@ -413,9 +403,6 @@ const titleFromPath = (path: string): string => {
   return Str.endsWith(".md")(fileName) ? fileName.slice(0, -3) : fileName
 }
 
-const scopeKey = (scope: VaultScope): string => Chunk.toReadonlyArray(scope.patterns).join("\u0000")
-const scopeFromKey = (key: string): VaultScope =>
-  new VaultScope({ patterns: Chunk.fromIterable(key.length === 0 ? [] : key.split("\u0000")) })
 
 const matches = (needle: string, ...values: ReadonlyArray<string | undefined>): boolean => {
   for (const value of values) {
@@ -445,4 +432,14 @@ const optionalString = <Key extends string>(key: Key, value: string | undefined)
     return {}
   }
   return { [key]: value } as Partial<Record<Key, string>>
+}
+
+const optionalValue = <Key extends string, Value>(
+  key: Key,
+  value: Value | undefined
+): { readonly [K in Key]?: Value } => {
+  if (value === undefined) {
+    return {}
+  }
+  return { [key]: value } as { readonly [K in Key]?: Value }
 }

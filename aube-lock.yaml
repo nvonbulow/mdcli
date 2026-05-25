@@ -228,6 +228,9 @@ importers:
       ioredis:
         specifier: ^5.7.0
         version: 5.10.1
+      vite:
+        specifier: ^6.0.0 || ^7.0.0 || ^8.0.0
+        version: 8.0.14(@types/node@24.12.4)(esbuild@0.28.0)(tsx@4.22.3)(yaml@2.9.0)
     devDependencies:
       '@types/node':
         specifier: ^24.10.1
@@ -238,6 +241,9 @@ importers:
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
+      vitest:
+        specifier: ^4.0.13
+        version: 4.1.7(@types/node@24.12.4)(vite@8.0.14(@types/node@24.12.4)(esbuild@0.28.0)(tsx@4.22.3)(yaml@2.9.0))
 
   packages/dataview:
     dependencies:

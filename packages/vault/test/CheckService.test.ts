@@ -1,8 +1,8 @@
 import { assert, describe, it } from "@effect/vitest"
 import { Chunk, Effect, Layer, Result, Trie } from "effect"
 
-import { CheckService } from "../src/CheckService"
-import type { CheckFinding } from "../src/CheckModel"
+import { CheckService, make } from "../src/CheckService"
+import { CheckFinding } from "../src/CheckModel"
 import { MarkdownFile } from "../src/markdown/MarkdownModel"
 import { MarkdownParser } from "../src/markdown/MarkdownParser"
 import { VaultService } from "../src/VaultService"
@@ -405,6 +405,36 @@ describe("CheckService", () => {
     }).pipe(Effect.provide(checkLayer(state)))
   })
 
+  it.effect("runFile calls analyzers only for the requested path", () => {
+    const state: TestVaultState = {
+      files: {
+        [absolutePath("Selected.md")]: "# Selected",
+        [absolutePath("Unrelated.md")]: "# Unrelated"
+      }
+    }
+    const check = make({
+      analyzeFile: (path: string) =>
+        Effect.succeed(
+          Chunk.of(
+            new CheckFinding({
+              category: "catalog",
+              severity: "warning",
+              path,
+              message: `checked ${path}`,
+              triggerPath: path
+            })
+          )
+        )
+    })
+
+    return Effect.gen(function* () {
+      const report = yield* check.runFile(VaultScope.allMarkdown, "Selected.md")
+
+      assert.deepStrictEqual(summaries(report.findings), [
+        ["catalog", "warning", "Selected.md", undefined, "checked Selected.md", "Selected.md", []]
+      ])
+    }).pipe(Effect.provide(vaultLayer(state)))
+  })
   it.effect("honors VaultScope glob selection and preserves the finding scope", () => {
     const state: TestVaultState = {
       files: {

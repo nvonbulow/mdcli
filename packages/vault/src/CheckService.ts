@@ -86,11 +86,17 @@ const makeWithScopedVault = (
 ): CheckServiceShape => {
   const runScope = Effect.fn("CheckService.runScope")(function* (
     scope: VaultScope,
-    selected: (path: string) => boolean
+    selectedPathsForVault: (vault: VaultShape) => Effect.Effect<Chunk.Chunk<string>, CheckServiceError>
   ) {
     const vault = yield* scopedVaultForScope(scope)
-    const context = yield* checkContext(scope, vault, selected)
-    const findings = yield* Effect.forEach(analyzers, (analyzer) => analyzer.analyze).pipe(
+    const selectedPaths = uniquePaths(yield* selectedPathsForVault(vault))
+    const selected = new Set(Chunk.toReadonlyArray(selectedPaths))
+    const context = yield* checkContext(scope, vault, (path) => selected.has(normalizePath(path)))
+    const findings = yield* Effect.forEach(selectedPaths, (path) =>
+      Effect.forEach(analyzers, (analyzer) => analyzer.analyzeFile(path)).pipe(
+        Effect.map((chunks) => Chunk.flatten(Chunk.fromIterable(chunks)))
+      )
+    ).pipe(
       Effect.map((chunks) => Chunk.flatten(Chunk.fromIterable(chunks))),
       Effect.provideService(CheckContext, context)
     )
@@ -99,15 +105,9 @@ const makeWithScopedVault = (
   })
 
   const service = CheckService.of({
-    run: (scope) => runScope(scope, () => true),
-    runFile: (scope, path) => {
-      const selected = normalizePath(path)
-      return runScope(scope, (candidate) => candidate === selected)
-    },
-    runFiles: (scope, paths) => {
-      const selected = new Set(Chunk.toReadonlyArray(Chunk.map(paths, normalizePath)))
-      return runScope(scope, (candidate) => selected.has(candidate))
-    }
+    run: (scope) => runScope(scope, selectedPathsFromVault),
+    runFile: (scope, path) => runScope(scope, () => Effect.succeed(uniquePaths(Chunk.of(normalizePath(path))))),
+    runFiles: (scope, paths) => runScope(scope, () => Effect.succeed(uniquePaths(Chunk.map(paths, normalizePath))))
   })
   serviceRegistry.set(service, { scopedVaultForScope, analyzers })
   return service
@@ -192,6 +192,18 @@ export const layerDumpOnly: Layer.Layer<CheckService, never, VaultService> = Lay
     return makeWithScopedVault(vault.scoped, dumpInbox)
   })
 ).pipe(Layer.provide(DumpInboxCheckAnalyzer.layer))
+
+const selectedPathsFromVault = (vault: VaultShape): Effect.Effect<Chunk.Chunk<string>, VaultIoError> =>
+  Effect.gen(function* () {
+    const notes = yield* vault.notes()
+    const diagnostics = yield* vault.diagnostics()
+    return uniquePaths(
+      Chunk.appendAll(
+        Chunk.map(notes, (note) => normalizePath(note.path)),
+        Chunk.map(diagnostics, (diagnostic) => normalizePath(diagnostic.path))
+      )
+    )
+  })
 
 const checkContext = (
   scope: VaultScope,
@@ -287,8 +299,19 @@ const basename = (path: string): string => {
   return index < 0 ? normalized : normalized.slice(index + 1)
 }
 
-const normalizePath = (path: string): string => Str.replaceAll("\\", "/")(path)
+const normalizePath = (path: string): string => {
+  const normalized = Str.replaceAll("\\", "/")(path)
+  return normalized.startsWith("./") ? normalized.slice(2) : normalized
+}
 
+
+const uniquePaths = (paths: Chunk.Chunk<string>): Chunk.Chunk<string> => {
+  const selected = new Set<string>()
+  for (const path of paths) {
+    selected.add(normalizePath(path))
+  }
+  return Chunk.fromIterable(Array.from(selected).sort(compareString))
+}
 const normalizeKey = (value: string): string => {
   const index = value.indexOf("#")
   const withoutHeading = index < 0 ? value : value.slice(0, index)

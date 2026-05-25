@@ -3,14 +3,15 @@ import { CheckContext, CheckFinding } from "./CheckModel"
 import { VaultService, type VaultServiceShape } from "./VaultService"
 import type { CheckServiceError } from "./CheckService"
 import type { VaultHeadingRecord, VaultLinkRecord } from "./Vault"
+import * as VaultScope from "./VaultScope"
 
 export type CheckAnalyzer = {
-  readonly analyze: Effect.Effect<Chunk.Chunk<CheckFinding>, CheckServiceError, CheckContext>
+  readonly analyzeFile: (path: string) => Effect.Effect<Chunk.Chunk<CheckFinding>, CheckServiceError, CheckContext>
 }
 
-const vaultDiagnostics = Effect.fn("VaultDiagnosticsCheckAnalyzer.analyze")(function* () {
+const vaultDiagnostics = Effect.fn("VaultDiagnosticsCheckAnalyzer.analyzeFile")(function* (path: string) {
   const context = yield* CheckContext
-  const diagnostics = yield* context.vault.diagnostics()
+  const diagnostics = yield* context.vault.diagnostics(VaultScope.fromPath(path))
   return Chunk.map(
     diagnostics,
     (diagnostic) =>
@@ -25,16 +26,13 @@ const vaultDiagnostics = Effect.fn("VaultDiagnosticsCheckAnalyzer.analyze")(func
   )
 })
 
-const linkIntegrity = Effect.fn("LinkIntegrityCheckAnalyzer.analyze")(function* () {
+const linkIntegrity = Effect.fn("LinkIntegrityCheckAnalyzer.analyzeFile")(function* (path: string) {
   const context = yield* CheckContext
   let findings = Chunk.empty<CheckFinding>()
   const seen = new Set<string>()
 
-  const links = yield* context.vault.links()
+  const links = yield* context.vault.links(VaultScope.fromPath(path))
   for (const link of links) {
-    if (!context.selected(link.path)) {
-      continue
-    }
     const matches = matchingPaths(
       context.indexes.notesByKey,
       context.indexes.basenameByKey,
@@ -84,15 +82,12 @@ const linkIntegrity = Effect.fn("LinkIntegrityCheckAnalyzer.analyze")(function* 
   return findings
 })
 
-const duplicateHeadings = Effect.fn("DuplicateHeadingCheckAnalyzer.analyze")(function* () {
+const duplicateHeadings = Effect.fn("DuplicateHeadingCheckAnalyzer.analyzeFile")(function* (path: string) {
   const context = yield* CheckContext
   let findings = Chunk.empty<CheckFinding>()
 
-  const headings = yield* context.vault.headings()
+  const headings = yield* context.vault.headings(VaultScope.fromPath(path))
   for (const heading of headings) {
-    if (!context.selected(heading.path)) {
-      continue
-    }
     if (heading.depth !== 1 || isArchivePath(heading.path)) {
       continue
     }
@@ -119,17 +114,15 @@ const duplicateHeadings = Effect.fn("DuplicateHeadingCheckAnalyzer.analyze")(fun
   return findings
 })
 
-const titleDrift = Effect.fn("TitleDriftCheckAnalyzer.analyze")(function* () {
+const titleDrift = Effect.fn("TitleDriftCheckAnalyzer.analyzeFile")(function* (path: string) {
   const context = yield* CheckContext
   let findings = Chunk.empty<CheckFinding>()
 
-  const notes = yield* context.vault.notes()
-  const headings = yield* context.vault.headings()
-  const frontmatter = yield* context.vault.frontmatter()
+  const fileScope = VaultScope.fromPath(path)
+  const notes = yield* context.vault.notes(fileScope)
+  const headings = yield* context.vault.headings(fileScope)
+  const frontmatter = yield* context.vault.frontmatter(fileScope)
   for (const note of notes) {
-    if (!context.selected(note.path)) {
-      continue
-    }
     const titleKey = normalizeKey(titleFromPath(note.path))
     const firstH1 = firstDepthOneHeading(headings, note.path)
 
@@ -171,15 +164,12 @@ const titleDrift = Effect.fn("TitleDriftCheckAnalyzer.analyze")(function* () {
   return findings
 })
 
-const archiveHeadings = Effect.fn("ArchiveHeadingCheckAnalyzer.analyze")(function* () {
+const archiveHeadings = Effect.fn("ArchiveHeadingCheckAnalyzer.analyzeFile")(function* (path: string) {
   const context = yield* CheckContext
   let findings = Chunk.empty<CheckFinding>()
 
-  const headings = yield* context.vault.headings()
+  const headings = yield* context.vault.headings(VaultScope.fromPath(path))
   for (const heading of headings) {
-    if (!context.selected(heading.path)) {
-      continue
-    }
     if (heading.depth !== 1) {
       continue
     }
@@ -207,50 +197,37 @@ const archiveHeadings = Effect.fn("ArchiveHeadingCheckAnalyzer.analyze")(functio
   return findings
 })
 
-const dumpInbox: (
+const dumpInbox = (
   vault: VaultServiceShape
-) => Effect.Effect<Chunk.Chunk<CheckFinding>, CheckServiceError, CheckContext> = Effect.fn(
-  "DumpInboxCheckAnalyzer.analyze"
-)(function* (vault: VaultServiceShape) {
-  const context = yield* CheckContext
-  let findings = Chunk.empty<CheckFinding>()
-  const notes = yield* context.vault.notes()
-  for (const note of notes) {
-    if (!context.selected(note.path)) {
-      continue
+): ((path: string) => Effect.Effect<Chunk.Chunk<CheckFinding>, CheckServiceError, CheckContext>) =>
+  Effect.fn("DumpInboxCheckAnalyzer.analyzeFile")(function* (path: string) {
+    if (basename(path) !== "dump.md") {
+      return Chunk.empty<CheckFinding>()
     }
-    if (basename(note.path) !== "dump.md") {
-      continue
-    }
-    const contents = yield* vault.readText(note.path)
+    const contents = yield* vault.readText(path)
     const lineNumber = firstStrandedDumpLine(contents)
-    if (lineNumber !== undefined) {
-      findings = Chunk.append(
-        findings,
-        new CheckFinding({
-          category: "dump",
-          severity: "warning",
-          path: note.path,
-          position: positionForLine(lineNumber),
-          message: "dump.md contains stranded non-heading content",
-          suggestedFix: "Move or archive stranded dump content.",
-          triggerPath: note.path
-        })
-      )
+    if (lineNumber === undefined) {
+      return Chunk.empty<CheckFinding>()
     }
-  }
-  return findings
-})
+    return Chunk.of(
+      new CheckFinding({
+        category: "dump",
+        severity: "warning",
+        path,
+        position: positionForLine(lineNumber),
+        message: "dump.md contains stranded non-heading content",
+        suggestedFix: "Move or archive stranded dump content.",
+        triggerPath: path
+      })
+    )
+  })
 
-const taskMetadata = Effect.fn("TaskMetadataCheckAnalyzer.analyze")(function* () {
+const taskMetadata = Effect.fn("TaskMetadataCheckAnalyzer.analyzeFile")(function* (path: string) {
   const context = yield* CheckContext
   let findings = Chunk.empty<CheckFinding>()
 
-  const tasks = yield* context.vault.tasks()
+  const tasks = yield* context.vault.tasks(VaultScope.fromPath(path))
   for (const record of tasks) {
-    if (!context.selected(record.path)) {
-      continue
-    }
     for (const fieldName of dateFieldNames) {
       const value = record.fields[fieldName]
       if (value !== undefined && !isIsoDate(value)) {
@@ -312,7 +289,7 @@ export class VaultDiagnosticsCheckAnalyzer extends Context.Service<VaultDiagnost
 ) {
   static readonly layer: Layer.Layer<VaultDiagnosticsCheckAnalyzer> = Layer.succeed(
     VaultDiagnosticsCheckAnalyzer,
-    VaultDiagnosticsCheckAnalyzer.of({ analyze: vaultDiagnostics() })
+    VaultDiagnosticsCheckAnalyzer.of({ analyzeFile: vaultDiagnostics })
   )
 }
 
@@ -321,7 +298,7 @@ export class LinkIntegrityCheckAnalyzer extends Context.Service<LinkIntegrityChe
 ) {
   static readonly layer: Layer.Layer<LinkIntegrityCheckAnalyzer> = Layer.succeed(
     LinkIntegrityCheckAnalyzer,
-    LinkIntegrityCheckAnalyzer.of({ analyze: linkIntegrity() })
+    LinkIntegrityCheckAnalyzer.of({ analyzeFile: linkIntegrity })
   )
 }
 
@@ -330,7 +307,7 @@ export class DuplicateHeadingCheckAnalyzer extends Context.Service<DuplicateHead
 ) {
   static readonly layer: Layer.Layer<DuplicateHeadingCheckAnalyzer> = Layer.succeed(
     DuplicateHeadingCheckAnalyzer,
-    DuplicateHeadingCheckAnalyzer.of({ analyze: duplicateHeadings() })
+    DuplicateHeadingCheckAnalyzer.of({ analyzeFile: duplicateHeadings })
   )
 }
 
@@ -339,7 +316,7 @@ export class TitleDriftCheckAnalyzer extends Context.Service<TitleDriftCheckAnal
 ) {
   static readonly layer: Layer.Layer<TitleDriftCheckAnalyzer> = Layer.succeed(
     TitleDriftCheckAnalyzer,
-    TitleDriftCheckAnalyzer.of({ analyze: titleDrift() })
+    TitleDriftCheckAnalyzer.of({ analyzeFile: titleDrift })
   )
 }
 
@@ -348,7 +325,7 @@ export class ArchiveHeadingCheckAnalyzer extends Context.Service<ArchiveHeadingC
 ) {
   static readonly layer: Layer.Layer<ArchiveHeadingCheckAnalyzer> = Layer.succeed(
     ArchiveHeadingCheckAnalyzer,
-    ArchiveHeadingCheckAnalyzer.of({ analyze: archiveHeadings() })
+    ArchiveHeadingCheckAnalyzer.of({ analyzeFile: archiveHeadings })
   )
 }
 
@@ -359,7 +336,7 @@ export class DumpInboxCheckAnalyzer extends Context.Service<DumpInboxCheckAnalyz
     DumpInboxCheckAnalyzer,
     Effect.gen(function* () {
       const vault: VaultServiceShape = yield* VaultService
-      return DumpInboxCheckAnalyzer.of({ analyze: dumpInbox(vault) })
+      return DumpInboxCheckAnalyzer.of({ analyzeFile: dumpInbox(vault) })
     })
   )
 }
@@ -369,7 +346,7 @@ export class TaskMetadataCheckAnalyzer extends Context.Service<TaskMetadataCheck
 ) {
   static readonly layer: Layer.Layer<TaskMetadataCheckAnalyzer> = Layer.succeed(
     TaskMetadataCheckAnalyzer,
-    TaskMetadataCheckAnalyzer.of({ analyze: taskMetadata() })
+    TaskMetadataCheckAnalyzer.of({ analyzeFile: taskMetadata })
   )
 }
 

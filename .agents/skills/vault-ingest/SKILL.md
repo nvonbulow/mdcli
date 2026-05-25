@@ -58,7 +58,7 @@ Before creating or editing records:
 1. Search likely project destinations in `vault/30-Projects/`.
 2. Search likely areas in `vault/20-Areas/`.
 3. Search existing resources in `vault/40-Resources/`.
-4. Search relevant logs in `vault/60-Logs/`, including the dated daily log for the session day when daily context is involved.
+4. Search relevant logs in `vault/60-Logs/`, including the dated daily log for the resolved local workflow date when daily context is involved.
 5. Search similar open and completed tasks before adding a new one.
 6. Reuse existing project, area, resource, and tag names when they already fit.
 
@@ -81,12 +81,16 @@ Normalize proposals before editing.
 
 ## Phase 6: Propose destinations and follow-ups
 
-Before editing, build a compact proposal when confidence is not high.
+Before editing, build a compact proposal when confidence is not high, and always build one for medium/large dump ingests.
 
 - Show the likely destination for each task or note.
 - Suggest follow-up tasks as suggestions, never as facts.
 - Suggest creating a new project only when several items point to a shared outcome, deadline, or multi-step lifecycle that does not fit existing project files.
 - Do not create new Markdown index files silently. Search for existing dashboards, context sections, or index-like notes first. Propose a new index only when repeated ingestion shows real retrieval friction.
+- Separate candidate extraction from state changes:
+  - Create obvious new tasks directly when the source text names a clear action and destination.
+  - Treat natural-language completion evidence as a candidate completion; ask before changing `- [ ]` to `- [x]` unless the user explicitly says the task is done.
+  - For project-vs-area or other structural decisions, give a short recommendation with rationale and ask before creating or moving records.
 
 ## Phase 7: Ask focused questions only where needed
 
@@ -99,6 +103,8 @@ Ask when:
 - dates, recurrence, tags, priority, or work/personal classification are ambiguous
 - a likely duplicate could be merged in more than one reasonable way
 - article/resource destination is unclear
+- natural-language evidence suggests an existing task was completed, but the source does not explicitly say to mark it complete
+- a structural choice such as project vs area, project split/merge, or new resource topic needs judgment
 
 Auto-apply only when source semantics and destination are obvious from the source text and existing vault context.
 
@@ -109,7 +115,7 @@ Apply the confirmed triage decisions.
 - Update project tasks and context in `vault/30-Projects/`.
 - Update area notes in `vault/20-Areas/`.
 - Update or create resource notes in `vault/40-Resources/`.
-- Append meaningful observations, decisions, events, and source summaries to `vault/60-Logs/daily/YYYY-MM-DD.md` when the material belongs in the day’s narrative.
+- Append meaningful observations, decisions, events, source summaries, and links to dump archives or ingestion artifacts to `vault/60-Logs/daily/YYYY-MM-DD.md` when the material belongs in the day’s narrative.
 - Append checkoff records to `vault/60-Logs/Task Completion History.md` when confirmed completions are part of the ingestion.
 - Archive raw material under `vault/90-Archive/` only when preserving the source verbatim is useful.
 
@@ -118,9 +124,14 @@ Apply the confirmed triage decisions.
 When the source is `vault/dump.md`:
 
 1. Move all meaningful content first.
-2. Archive the original dump under `vault/90-Archive/dumps/` using the existing timestamped filename convention and a unique top-level `# Dump Archive ...` heading.
-3. Keep `vault/dump.md` at the vault root as the active inbox/scratch file.
-4. Reset `vault/dump.md` to the minimal active-inbox structure already used in the vault, preserving headings if present.
+2. Archive the original dump under `vault/90-Archive/dumps/` using the existing timestamped filename convention.
+   - Copy the dump content verbatim whenever possible; do not manually rewrite the body.
+   - Ensure the archive has a unique top-level heading matching the archive filename, such as `# dump-YYYYMMDD-HHMMSS`, then keep the dump's own structure under lower-level headings.
+3. Add or update the dated daily log with a link to the archive file and any other ingestion artifacts created from the dump.
+4. Keep `vault/dump.md` at the vault root as the active inbox/scratch file.
+5. Reset `vault/dump.md` from the fenced Markdown template in `vault/40-Resources/Vault/Dump Template.md`.
+   - The reset content must have a unique top-level `#` heading matching `dump.md`, currently `# Dump`, with editable lower-level sections such as `## Personal` and `## Work`.
+   - Update the template file when changing the desired active dump structure; do not hardcode the reset shape in the skill.
 
 For pasted text, no source cleanup is needed.
 
@@ -143,7 +154,7 @@ When the source is a URL, article, paper, or other reference material:
 
 After edits:
 
-1. Run `kb --format json check` after any vault content change. Treat a nonzero exit with well-formed JSON findings as a completed check; inspect findings and fix any errors or newly introduced warnings before yielding.
+1. Run `kb --format json check` after any vault content change. Treat a nonzero exit with well-formed JSON findings as a completed check; inspect findings and fix any errors or newly introduced warnings before yielding. If only pre-existing findings remain, report them separately and offer to clean them up interactively.
 2. Run targeted `kb --format json task today`, `task due`, `task week`, or `task open` queries when scheduled or due dates changed.
 3. Use targeted `search` to confirm edited task metadata, resource links, or daily-log entries when needed.
 4. Run `jj status` in `vault/` before yielding when vault content changed.

@@ -16,8 +16,9 @@ If `vault/dump.md` contains fresh capture relevant to the closeout, use [vault-i
 Goal: close the loop, record completion, resolve overdue ambiguity, and reduce tomorrow’s surface area.
 
 1. Establish dates.
-   - Use the session date as `TODAY` unless the user specifies another date.
-   - Compute `TOMORROW` as the next calendar day.
+   - Resolve `TODAY` using the shared local date and timezone policy; do not trust the harness/session UTC date when it differs from `America/New_York`.
+   - If the local time is between 00:00 and 03:00 and the user has not given an explicit date, ask whether this closeout is for the previous calendar day or the new calendar day before querying or editing.
+   - Compute `TOMORROW` as the next calendar day after the resolved `TODAY`.
 
 2. Query today and nearby context.
 

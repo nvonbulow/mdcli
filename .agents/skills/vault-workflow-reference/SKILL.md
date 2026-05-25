@@ -27,6 +27,13 @@ kb --format json task open
 ```
 
 Deferred future CLI workflow aids belong in `ROADMAP.md`, not in this skill.
+## Date and timezone policy
+
+1. The vault uses the user's local calendar day in `America/New_York`, not the harness/session UTC date.
+2. When a workflow needs an implicit date, compute `LOCAL_TODAY` from the current time in `America/New_York`; use that for `TODAY`.
+3. If the local time is between 00:00 and 03:00 and the user says "today" without an explicit date, ask whether they mean the previous calendar day or the new calendar day before querying or editing dated tasks/logs.
+4. When the user specifies an explicit date, use it exactly and do not apply the late-night ambiguity rule.
+5. Compute `TOMORROW` as the next calendar day after the resolved `TODAY`.
 
 ## Vault source-of-truth rules
 
@@ -37,7 +44,7 @@ Deferred future CLI workflow aids belong in `ROADMAP.md`, not in this skill.
 5. Use `jj -R vault` or run Jujutsu commands with `cwd: vault` for vault version-control checks.
 6. Never mark a task complete unless the user explicitly confirms it was done.
 7. PARA here means Projects (`30-Projects/`), Areas (`20-Areas/`), Resources (`40-Resources/`), and Archive (`90-Archive/`), plus dashboards, logs, and the active dump.
-8. Archive Markdown files need unique top-level `#` headings; archived dumps should use timestamped archive headings instead of generic `# Personal` or `# Work` headings.
+8. Archive Markdown files need unique top-level `#` headings. Archived dumps should use a filename-matching timestamped heading such as `# dump-YYYYMMDD-HHMMSS`, not generic headings such as `# Personal` or `# Work`.
 
 ## Task metadata conventions
 

@@ -14,7 +14,8 @@ Load [vault-workflow-reference](../vault-workflow-reference/SKILL.md) for shared
 Goal: give the user a small, accurate plan for today.
 
 1. Establish dates.
-   - Use the session date as `TODAY` unless the user specifies another date.
+   - Resolve `TODAY` using the shared local date and timezone policy; do not trust the harness/session UTC date when it differs from `America/New_York`.
+   - If the local time is between 00:00 and 03:00 and the user says "today" without an explicit date, ask whether they mean the previous calendar day or the new calendar day before querying or editing.
    - Compute tomorrow only if it helps explain upcoming work.
 
 2. Query the vault from repo root.

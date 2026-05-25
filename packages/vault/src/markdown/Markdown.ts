@@ -1,4 +1,5 @@
-import type { ObsidianListItem, ObsidianTag, ObsidianWikilink } from "@kb/remark-obsidian"
+import type { ObsidianInlineField, ObsidianListItem, ObsidianTag, ObsidianWikilink } from "@kb/remark-obsidian"
+
 import type { Code, Heading, ListItem, Root, Yaml } from "mdast"
 import { Chunk } from "effect"
 import * as Effect from "effect/Effect"
@@ -48,7 +49,7 @@ type MarkdownNode = {
   readonly value?: unknown
   readonly data?: Record<string, unknown> & {
     readonly obsidianWikilinks?: ReadonlyArray<ObsidianWikilink>
-    readonly obsidianInlineFields?: ReadonlyArray<unknown>
+    readonly obsidianInlineFields?: ReadonlyArray<ObsidianInlineField>
     readonly obsidianTags?: ReadonlyArray<ObsidianTag>
   }
 }

@@ -8,19 +8,22 @@
   },
   "scripts": {
     "kb": "tsx src/cli.ts",
+    "build": "node build.mjs",
+    "kb:bundled": "node dist/cli.cjs",
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@effect/platform-node": "beta",
-    "@kb/vault": "workspace:*",
     "@kb/dataview": "workspace:*",
+    "@kb/vault": "workspace:*",
     "effect": "beta"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",
+    "esbuild": "^0.28.0",
     "tsx": "^4.20.6",
-    "vitest": "^4.0.13",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.13"
   }
 }

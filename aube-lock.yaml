@@ -37,6 +37,7 @@ time:
   '@types/ms@2.1.0': 2025-01-16T21:02:46.181Z
   '@types/node@24.12.4': 2026-05-11T22:25:29.000Z
   '@types/unist@3.0.3': 2024-08-15T02:19:16.553Z
+  '@types/vfile@4.0.0': 2019-11-06T21:10:43.598Z
   '@types/ws@8.18.1': 2025-04-01T02:59:54.693Z
   '@vitest/expect@4.1.7': 2026-05-20T07:19:30.353Z
   '@vitest/mocker@4.1.7': 2026-05-20T07:19:19.670Z
@@ -235,6 +236,73 @@ importers:
       '@types/node':
         specifier: ^24.10.1
         version: 24.12.4
+      esbuild:
+        specifier: ^0.28.0
+        version: 0.28.0
+      tsx:
+        specifier: ^4.20.6
+        version: 4.22.3
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^4.0.13
+        version: 4.1.7(@types/node@24.12.4)(vite@8.0.14(@types/node@24.12.4)(esbuild@0.28.0)(tsx@4.22.3)(yaml@2.9.0))
+
+  apps/spike:
+    dependencies:
+      '@effect/platform-node':
+        specifier: beta
+        version: 4.0.0-beta.70(effect@4.0.0-beta.70)(ioredis@5.10.1)
+      '@kb/remark-obsidian':
+        specifier: workspace:*
+        version: 0.1.0
+      effect:
+        specifier: beta
+        version: 4.0.0-beta.70
+      ioredis:
+        specifier: ^5.7.0
+        version: 5.10.1
+      remark-frontmatter:
+        specifier: ^5.0.0
+        version: 5.0.0
+      remark-gfm:
+        specifier: ^4.0.1
+        version: 4.0.1
+      remark-parse:
+        specifier: ^11.0.0
+        version: 11.0.0
+      remark-stringify:
+        specifier: ^11.0.0
+        version: 11.0.0
+      unified:
+        specifier: ^11.0.5
+        version: 11.0.5
+      unist-util-visit:
+        specifier: ^5.1.0
+        version: 5.1.0
+      unist-util-visit-parents:
+        specifier: ^6.0.2
+        version: 6.0.2
+      vfile:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vite:
+        specifier: ^6.0.0 || ^7.0.0 || ^8.0.0
+        version: 8.0.14(@types/node@24.12.4)(esbuild@0.28.0)(tsx@4.22.3)(yaml@2.9.0)
+    devDependencies:
+      '@types/mdast':
+        specifier: ^4.0.4
+        version: 4.0.4
+      '@types/node':
+        specifier: ^24.10.1
+        version: 24.12.4
+      '@types/unist':
+        specifier: ^3.0.3
+        version: 3.0.3
+      '@types/vfile':
+        specifier: ^4.0.0
+        version: 4.0.0
       tsx:
         specifier: ^4.20.6
         version: 4.22.3
@@ -288,6 +356,9 @@ importers:
         specifier: ^4.0.1
         version: 4.0.1
       remark-parse:
+        specifier: ^11.0.0
+        version: 11.0.0
+      remark-stringify:
         specifier: ^11.0.0
         version: 11.0.0
       unified:
@@ -547,6 +618,9 @@ packages:
 
   '@types/unist@3.0.3':
     resolution: {integrity: sha512-ko/gIFJRv177XgZsZcBwnqJN5x/Gien8qNOn0D5bQU/zAzVf9Zt3BlcUiLqhV9y4ARk0GbT3tnUiPNgnTXzc/Q==}
+
+  '@types/vfile@4.0.0':
+    resolution: {integrity: sha512-eleP0/Cz8uVWxARDLi3Axq2+fDdN4ibAXoC6Pv8p6s7znXaUL7XvhgeIhjCiNMnvlLNP+tmCLd+RuCryGgmtEg==}
 
   '@types/ws@8.18.1':
     resolution: {integrity: sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==}
@@ -1286,6 +1360,10 @@ snapshots:
       undici-types: 7.16.0
 
   '@types/unist@3.0.3': {}
+
+  '@types/vfile@4.0.0':
+    dependencies:
+      vfile: 6.0.3
 
   '@types/ws@8.18.1':
     dependencies:

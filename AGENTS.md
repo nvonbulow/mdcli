@@ -20,7 +20,7 @@
 - Use normal static imports for types and values. Do not use inline dynamic `import("...")` type references in exported signatures.
 - Keep hardcoded environment defaults out of app/package code; pass policy and defaults explicitly from CLI/services.
 - Keep app and package code Effect-based TypeScript only.
-- Do not introduce `async`, `await`, `try/catch`, `throw`, `Date.now`, `new Date`, or TypeScript `interface` in app/package code.
+- Do not introduce `async`, `await`, `try/catch`, `throw`, `Date.now`, or `new Date` in app/package code. Prefer TypeScript `interface` for behavioral shapes and structural contracts; use Effect `Data.Class` / `Data.TaggedEnum` instead of `interface` for data models.
 - Wrap external libraries behind thin Effect services at the async boundary; Promises, `Effect.promise`, `Effect.tryPromise`, and sibling async constructors must not leak outside wrapper code.
 - Give async classes or interfaces from external libraries Effectful facades before package/app code depends on them.
 - Avoid `Effect.sync` unless a block absolutely must run synchronously; when construction is pure, prefer pure Layer construction such as `Layer.succeed`.

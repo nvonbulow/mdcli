@@ -19,6 +19,7 @@ These are intentionally deferred. Do not implement them as part of the current v
   - Add a vault check ignore file, similar to `.gitignore`, for intentional non-note files and specific findings; use it to exclude files such as `AGENTS.md` from note title-drift checks without weakening checks globally.
   - Add regression tests for relative source-copy links, resource `topic` metadata, and ignore-file behavior.
 - [x] P0: set up config file/environment variables (using effect's config system) to set a default vault path instead of assuming `./vault`
+- [ ] P0: Add a command for checking overdue tasks `kb task overdue`
 - [ ] P0: Allow wikilinks to references headings within the linked file
   - For example `[[#heading]]` links to a heading within the same file. `[[#heading#subheading]]` references a subheading, and `[[Note#heading]]` references a heading in a different file. Checks will need to be updated to follow heading references.
   - Remark plugin should also be updated to parse new formats accordingly

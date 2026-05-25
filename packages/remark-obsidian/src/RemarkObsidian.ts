@@ -1,6 +1,6 @@
 import type { Parent, Text } from "mdast"
 import type { Node, Position } from "unist"
-import type { Plugin, Transformer } from "unified"
+import type { Plugin, Processor, Transformer } from "unified"
 import { scanInlineFields, type InlineFieldSpan } from "./InlineFieldScanner"
 import type { ObsidianInlineField, ObsidianTag, ObsidianWikilink, SourceSpan } from "./ObsidianNodes"
 
@@ -24,6 +24,20 @@ type ObsidianPluginData = Record<string, unknown> & {
     readonly inlineFields: readonly ObsidianInlineField[]
     readonly position?: Position
   }
+}
+
+type ToMarkdownHandler<Value extends Node> = (node: Value) => string
+
+type ToMarkdownExtension = {
+  readonly handlers: {
+    readonly obsidianWikilink: ToMarkdownHandler<ObsidianWikilink>
+    readonly obsidianInlineField: ToMarkdownHandler<ObsidianInlineField>
+    readonly obsidianTag: ToMarkdownHandler<ObsidianTag>
+  }
+}
+
+type ToMarkdownData = Record<string, unknown> & {
+  toMarkdownExtensions?: ToMarkdownExtension[]
 }
 
 type WikilinkSpan = {
@@ -62,40 +76,76 @@ type WikilinkParts = {
 
 export type RemarkObsidianOptions = Record<string, never>
 
-export const remarkObsidian: Plugin<[RemarkObsidianOptions?], Node> = (): Transformer<Node> => (tree, file) => {
-  visitTextNodes(tree, [], (text, ancestors) => {
-    const parent = ancestors[ancestors.length - 1] as MutableParent | undefined
-    if (parent === undefined) {
-      return
-    }
+export const remarkObsidian: Plugin<[RemarkObsidianOptions?], Node> = function remarkObsidianPlugin(
+  this: Processor
+): Transformer<Node> {
+  const self = this
+  const data = self.data() as ToMarkdownData
+  const extensions = data.toMarkdownExtensions ?? (data.toMarkdownExtensions = [])
+  extensions.push(obsidianToMarkdownExtension)
 
-    const index = parent.children.indexOf(text)
-    if (index === -1) {
-      return
-    }
+  return (tree, file) => {
+    visitTextNodes(tree, [], (text, ancestors) => {
+      const parent = ancestors[ancestors.length - 1] as MutableParent | undefined
+      if (parent === undefined) {
+        return
+      }
 
-    const wikilinks = scanWikilinks(text.value, text.position)
-    const inlineFields = scanInlineFields(text.value).map((field) => inlineFieldNode(text.value, field, text.position))
-    const tags = scanTags(text.value, text.position).filter(
-      (tag) => !overlapsAny(relativeSpan(tag), wikilinks, inlineFields)
-    )
-    if (wikilinks.length === 0 && inlineFields.length === 0 && tags.length === 0) {
-      return
-    }
+      const index = parent.children.indexOf(text)
+      if (index === -1) {
+        return
+      }
 
-    attachSyntaxData(parent, wikilinks, inlineFields, tags)
-    attachSyntaxData(text, wikilinks, inlineFields, tags)
+      const wikilinks = scanWikilinks(text.value, text.position)
+      const inlineFields = scanInlineFields(text.value).map((field) =>
+        inlineFieldNode(text.value, field, text.position)
+      )
+      const tags = scanTags(text.value, text.position).filter(
+        (tag) => !overlapsAny(relativeSpan(tag), wikilinks, inlineFields)
+      )
+      if (wikilinks.length === 0 && inlineFields.length === 0 && tags.length === 0) {
+        return
+      }
 
-    const listItem = nearestListItem(ancestors)
-    if (listItem !== undefined) {
-      attachSyntaxData(listItem, wikilinks, inlineFields, tags)
-    }
+      attachSyntaxData(parent, wikilinks, inlineFields, tags)
+      attachSyntaxData(text, wikilinks, inlineFields, tags)
 
-    const replacements = replaceTextNode(text, wikilinks, inlineFields, tags)
-    parent.children.splice(index, 1, ...replacements)
-  })
-  annotateTasks(tree, String(file.value ?? ""))
+      const listItem = nearestListItem(ancestors)
+      if (listItem !== undefined) {
+        attachSyntaxData(listItem, wikilinks, inlineFields, tags)
+      }
+
+      const replacements = replaceTextNode(text, wikilinks, inlineFields, tags)
+      parent.children.splice(index, 1, ...replacements)
+    })
+    annotateTasks(tree, String(file.value ?? ""))
+  }
 }
+
+const obsidianToMarkdownExtension: ToMarkdownExtension = {
+  handlers: {
+    obsidianWikilink: (node) => wikilinkMarkdown(node),
+    obsidianInlineField: (node) => inlineFieldMarkdown(node),
+    obsidianTag: (node) => node.value
+  }
+}
+
+const wikilinkMarkdown = (node: ObsidianWikilink): string => {
+  const subpath =
+    node.block === undefined ? optionalPrefixed("#", node.heading) : `#^${node.block}`
+  const alias = node.alias === undefined ? "" : `|${node.alias}`
+  return `[[${node.target}${subpath}${alias}]]`
+}
+
+const inlineFieldMarkdown = (node: ObsidianInlineField): string => {
+  const parenDelimited = node.original.startsWith("(") && node.original.endsWith(")")
+  const open = parenDelimited ? "(" : "["
+  const close = parenDelimited ? ")" : "]"
+  return `${open}${node.key}:: ${node.value}${close}`
+}
+
+const optionalPrefixed = (prefix: string, value: string | undefined): string =>
+  value === undefined ? "" : `${prefix}${value}`
 
 const visitTextNodes = (
   node: Node,

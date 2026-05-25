@@ -4,6 +4,7 @@ import { toString } from "mdast-util-to-string"
 import remarkFrontmatter from "remark-frontmatter"
 import remarkGfm from "remark-gfm"
 import remarkParse from "remark-parse"
+import remarkStringify from "remark-stringify"
 import type { Node } from "unist"
 import { visit } from "unist-util-visit"
 import { unified } from "unified"
@@ -29,6 +30,17 @@ const parse = (markdown: string): Root => {
   const processor = unified().use(remarkParse).use(remarkGfm).use(remarkFrontmatter, ["yaml"]).use(remarkObsidian)
 
   return processor.runSync(processor.parse(markdown)) as Root
+}
+
+const render = (markdown: string): string => {
+  const processor = unified()
+    .use(remarkParse)
+    .use(remarkGfm)
+    .use(remarkFrontmatter, ["yaml"])
+    .use(remarkObsidian)
+    .use(remarkStringify)
+
+  return String(processor.stringify(processor.runSync(processor.parse(markdown)) as Root))
 }
 
 const collect = <Value extends Node>(tree: Node, type: string): Value[] => {
@@ -149,5 +161,18 @@ describe("remarkObsidian", () => {
 
     assert.equal(links.length, 1)
     assert.equal(links[0]?.target, "Yep")
+  })
+
+  it("stringifies Obsidian nodes back to Obsidian markdown syntax", () => {
+    const output = render(
+      "Before [[Target|Alias]] and [[Target#Heading]] and [[Target#^block]] [due:: 2026-05-24] (priority:: high) #task"
+    )
+
+    assert.match(output, /\[\[Target\|Alias\]\]/)
+    assert.match(output, /\[\[Target#Heading\]\]/)
+    assert.match(output, /\[\[Target#\^block\]\]/)
+    assert.match(output, /\[due:: 2026-05-24\]/)
+    assert.match(output, /\(priority:: high\)/)
+    assert.match(output, /#task/)
   })
 })

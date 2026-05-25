@@ -58,7 +58,8 @@ const vaultLayer = (state: TestVaultState) =>
       }
       const readMarkdownTree = (scope: VaultScope.VaultScope) =>
         Effect.gen(function* () {
-          const paths = relativeMarkdownPaths(state.files).filter((path) => matchesScope(scope, path))
+          const ignored = ignoredMarkdownPaths(state.files)
+          const paths = relativeMarkdownPaths(state.files).filter((path) => matchesScope(scope, path) && !ignored.has(path))
           const files = yield* Effect.forEach(paths, (path) => {
             const failure = state.parseFailures?.[path]
             if (failure !== undefined) {
@@ -125,6 +126,26 @@ const matchesPattern = (pattern: string, path: string): boolean => {
   return normalizedPattern === path
 }
 
+const ignoredMarkdownPaths = (files: TestFiles): ReadonlySet<string> => {
+  const ignored = new Set<string>()
+  const ignoreFile = files[absolutePath(".kbignore")]
+  if (ignoreFile === undefined) {
+    return ignored
+  }
+  for (const line of ignoreFile.split("\n")) {
+    const trimmed = line.trim()
+    if (trimmed.length === 0 || trimmed.startsWith("#") || trimmed.includes("/")) {
+      continue
+    }
+    for (const path of relativeMarkdownPaths(files)) {
+      if (path === trimmed || path.endsWith(`/${trimmed}`)) {
+        ignored.add(path)
+      }
+    }
+  }
+  return ignored
+}
+
 const summaries = (findings: Chunk.Chunk<CheckFinding>): ReadonlyArray<FindingSummary> =>
   toArray(findings).map((finding) => [
     finding.category,
@@ -145,14 +166,15 @@ describe("CheckService", () => {
       files: {
         [absolutePath("Notes/Source.md")]: [
           "# Source",
-          "See [[Missing]], [[Beta]], [[Shared H1]], [[Notes/Target.md]], and [[Unique H1]]."
+          "See [[Missing]], [[Beta]], [[Shared H1]], [[Notes/Target.md]], [[Unique H1]], and [[sources/incup-full]]."
         ].join("\n"),
         [absolutePath("Notes/Target.md")]: "# Target",
         [absolutePath("Notes/Beta.md")]: "# First Beta",
         [absolutePath("Other/Beta.md")]: "# Second Beta",
         [absolutePath("Notes/ByH1.md")]: "# Unique H1",
         [absolutePath("Notes/SharedA.md")]: "# Shared H1",
-        [absolutePath("Other/SharedB.md")]: "# Shared H1"
+        [absolutePath("Other/SharedB.md")]: "# Shared H1",
+        [absolutePath("Notes/sources/incup-full.md")]: "# INCUP Full Copy",
       }
     }
 
@@ -243,18 +265,26 @@ describe("CheckService", () => {
     }).pipe(Effect.provide(checkLayer(state)))
   })
 
-  it.effect("reports basename, first H1, and simple frontmatter title/topic drift", () => {
+  it.effect("reports basename, first H1, and title frontmatter drift", () => {
     const state: TestVaultState = {
       files: {
         [absolutePath("Notes/Drift.md")]: [
           "---",
           "title: Wrong Title",
-          "topic: 'Wrong Topic'",
+          "topic: ADHD",
           "status: active",
           "---",
           "# Wrong H1"
         ].join("\n"),
-        [absolutePath("Notes/Clean.md")]: ["---", "title: Clean", "topic: Clean", "---", "# Clean"].join("\n")
+        [absolutePath("Notes/Clean.md")]: ["---", "title: Clean", "topic: ADHD", "---", "# Clean"].join("\n"),
+        [absolutePath("Notes/incup-full.md")]: [
+          "---",
+          "type: source-copy",
+          "topic: ADHD",
+          "---",
+          "# INCUP - Full Copy"
+        ].join("\n"),
+        [absolutePath("Notes/Normal.md")]: ["---", "type: article", "---", "# Descriptive Normal Title"].join("\n")
       }
     }
 
@@ -273,17 +303,52 @@ describe("CheckService", () => {
           "Notes/Drift.md",
           []
         ],
+        ["title-drift", "warning", "Notes/Drift.md", 6, "H1 does not match note title: Wrong H1", "Notes/Drift.md", []],
+        [
+          "title-drift",
+          "warning",
+          "Notes/Normal.md",
+          4,
+          "H1 does not match note title: Descriptive Normal Title",
+          "Notes/Normal.md",
+          []
+        ]
+      ])
+    }).pipe(Effect.provide(checkLayer(state)))
+  })
+
+  it.effect("excludes ignored markdown files from vault-wide checks", () => {
+    const state: TestVaultState = {
+      files: {
+        [absolutePath(".kbignore")]: ["# Intentional instruction file", "AGENTS.md"].join("\n"),
+        [absolutePath("AGENTS.md")]: "# Vault agent instructions",
+        [absolutePath("Notes/Drift.md")]: "# Wrong Drift Title"
+      }
+    }
+
+    return Effect.gen(function* () {
+      const check = yield* CheckService
+      const report = yield* check.run(VaultScope.allMarkdown)
+      const notes = toArray(yield* report.vault.notes())
+
+      assert.deepStrictEqual(
+        notes.map((note) => note.path),
+        ["Notes/Drift.md"]
+      )
+      assert.deepStrictEqual(summaries(report.findings), [
         [
           "title-drift",
           "warning",
           "Notes/Drift.md",
           1,
-          "Frontmatter topic does not match note title: Wrong Topic",
+          "H1 does not match note title: Wrong Drift Title",
           "Notes/Drift.md",
           []
-        ],
-        ["title-drift", "warning", "Notes/Drift.md", 6, "H1 does not match note title: Wrong H1", "Notes/Drift.md", []]
+        ]
       ])
+
+      const ignoredReport = yield* check.runFile(VaultScope.allMarkdown, "AGENTS.md")
+      assert.deepStrictEqual(summaries(ignoredReport.findings), [])
     }).pipe(Effect.provide(checkLayer(state)))
   })
 

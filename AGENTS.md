@@ -1,6 +1,7 @@
 # Repository agent instructions
 
 - Treat `vendor/effect` as the source of truth for Effect APIs, service design, package layout, tests, and TypeScript idioms. Read the relevant vendor files before implementing Effect services, layers, CLI commands, or package structure.
+- This workspace uses Effect v4 beta. Do not run version detection for normal CLI/package work; use Effect v4 docs and `vendor/effect` as the local source of truth. Current lockfile evidence: `effect@4.0.0-beta.70`, `@effect/platform-node@4.0.0-beta.70`, and `@effect/vitest@4.0.0-beta.70`.
 - Keep meaningful `packages/vault` and `packages/dataview` behavior on `Context.Service` classes and provide it through layers.
 - Do not add exported naked behavior functions or raw helper APIs that bypass services; model/schema constants and data classes are acceptable.
 - Put vault configuration in `VaultService.makeLayer({ root })`; do not invent hidden default root/source paths.

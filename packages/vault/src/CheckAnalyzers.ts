@@ -37,6 +37,7 @@ const linkIntegrity = Effect.fn("LinkIntegrityCheckAnalyzer.analyzeFile")(functi
       context.indexes.notesByKey,
       context.indexes.basenameByKey,
       context.indexes.h1ByKey,
+      link.path,
       link.target
     )
     if (matches.length === 0) {
@@ -125,8 +126,9 @@ const titleDrift = Effect.fn("TitleDriftCheckAnalyzer.analyzeFile")(function* (p
   for (const note of notes) {
     const titleKey = normalizeKey(titleFromPath(note.path))
     const firstH1 = firstDepthOneHeading(headings, note.path)
+    const isSourceCopyNote = hasFrontmatterValue(frontmatter, note.path, "type", "source-copy")
 
-    if (firstH1 !== undefined && normalizeKey(firstH1.text) !== titleKey) {
+    if (firstH1 !== undefined && !isSourceCopyNote && normalizeKey(firstH1.text) !== titleKey) {
       findings = Chunk.append(
         findings,
         new CheckFinding({
@@ -135,7 +137,7 @@ const titleDrift = Effect.fn("TitleDriftCheckAnalyzer.analyzeFile")(function* (p
           path: firstH1.path,
           message: `H1 does not match note title: ${firstH1.text}`,
           position: firstH1.position,
-          suggestedFix: "Update the H1 or frontmatter title/topic to match the note basename.",
+          suggestedFix: "Update the H1 or frontmatter title to match the note basename.",
           triggerPath: note.path
         })
       )
@@ -152,7 +154,7 @@ const titleDrift = Effect.fn("TitleDriftCheckAnalyzer.analyzeFile")(function* (p
               path: record.path,
               message: `Frontmatter ${entry.key} does not match note title: ${entry.value}`,
               position: record.position,
-              suggestedFix: "Update the H1 or frontmatter title/topic to match the note basename.",
+              suggestedFix: "Update the H1 or frontmatter title to match the note basename.",
               triggerPath: note.path
             })
           )
@@ -383,6 +385,20 @@ const matchingPaths = (
   notesByKey: ReadonlyMap<string, Chunk.Chunk<string>>,
   basenameByKey: ReadonlyMap<string, Chunk.Chunk<string>>,
   h1ByKey: ReadonlyMap<string, Chunk.Chunk<string>>,
+  sourcePath: string,
+  target: string
+): ReadonlyArray<string> => {
+  const paths = matchingGlobalPaths(notesByKey, basenameByKey, h1ByKey, target)
+  if (paths.length > 0 || !isRelativePathQualifiedTarget(target)) {
+    return paths
+  }
+  return sortedPaths(notesByKey.get(relativeTargetKey(sourcePath, target)) ?? Chunk.empty<string>())
+}
+
+const matchingGlobalPaths = (
+  notesByKey: ReadonlyMap<string, Chunk.Chunk<string>>,
+  basenameByKey: ReadonlyMap<string, Chunk.Chunk<string>>,
+  h1ByKey: ReadonlyMap<string, Chunk.Chunk<string>>,
   target: string
 ): ReadonlyArray<string> => {
   const key = normalizeKey(target)
@@ -419,6 +435,42 @@ const sourcePositionKey = (position: VaultLinkRecord["position"]): string =>
         position.end.offset ?? ""
       }`
 
+const relativeTargetKey = (sourcePath: string, target: string): string => {
+  const headingIndex = target.indexOf("#")
+  const pathTarget = headingIndex < 0 ? target : target.slice(0, headingIndex)
+  const heading = headingIndex < 0 ? "" : target.slice(headingIndex)
+  const directory = dirname(sourcePath)
+  return normalizeKey(`${normalizeRelativePath(directory, pathTarget)}${heading}`)
+}
+
+const isRelativePathQualifiedTarget = (target: string): boolean => {
+  const pathTarget = target.slice(0, target.indexOf("#") < 0 ? target.length : target.indexOf("#"))
+  return pathTarget.includes("/") && !pathTarget.startsWith("/")
+}
+
+const dirname = (path: string): string => {
+  const normalized = Str.replaceAll("\\", "/")(path)
+  const index = normalized.lastIndexOf("/")
+  return index < 0 ? "" : normalized.slice(0, index)
+}
+
+const normalizeRelativePath = (directory: string, target: string): string => {
+  const segments = `${directory.length === 0 ? target : `${directory}/${target}`}`.split("/")
+  const normalized: Array<string> = []
+  for (const segment of segments) {
+    if (segment.length === 0 || segment === ".") {
+      continue
+    }
+    if (segment === "..") {
+      normalized.pop()
+      continue
+    }
+    normalized.push(segment)
+  }
+  return normalized.join("/")
+}
+
+
 const firstDepthOneHeading = (
   headings: Chunk.Chunk<VaultHeadingRecord>,
   path: string
@@ -435,22 +487,45 @@ const frontmatterTitles = (value: string): ReadonlyArray<{ readonly key: string;
   const entries: Array<{ readonly key: string; readonly value: string }> = []
   const lines = value.split("\n")
   for (const line of lines) {
-    const trimmed = line.trim()
-    const separator = trimmed.indexOf(":")
-    if (separator <= 0) {
+    const entry = frontmatterEntry(line)
+    if (entry === undefined || entry.key !== "title" || entry.value.length === 0) {
       continue
     }
-    const key = trimmed.slice(0, separator).trim().toLowerCase()
-    if (key !== "title" && key !== "topic") {
-      continue
-    }
-    const rawValue = trimmed.slice(separator + 1).trim()
-    const value = unquote(rawValue)
-    if (value.length > 0) {
-      entries.push({ key, value })
-    }
+    entries.push(entry)
   }
   return entries
+}
+
+const hasFrontmatterValue = (
+  records: Chunk.Chunk<{ readonly path: string; readonly value: string }>,
+  path: string,
+  expectedKey: string,
+  expectedValue: string
+): boolean => {
+  for (const record of records) {
+    if (record.path !== path) {
+      continue
+    }
+    const lines = record.value.split("\n")
+    for (const line of lines) {
+      const entry = frontmatterEntry(line)
+      if (entry !== undefined && entry.key === expectedKey && entry.value === expectedValue) {
+        return true
+      }
+    }
+  }
+  return false
+}
+
+const frontmatterEntry = (line: string): { readonly key: string; readonly value: string } | undefined => {
+  const trimmed = line.trim()
+  const separator = trimmed.indexOf(":")
+  if (separator <= 0) {
+    return undefined
+  }
+  const key = trimmed.slice(0, separator).trim().toLowerCase()
+  const value = unquote(trimmed.slice(separator + 1).trim())
+  return { key, value }
 }
 
 const firstStrandedDumpLine = (contents: string): number | undefined => {

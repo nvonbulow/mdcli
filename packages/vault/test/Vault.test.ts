@@ -171,6 +171,50 @@ describe("Vault", () => {
       assert.strictEqual(state.writes, 0)
     }).pipe(Effect.provide(vaultLayer(state)))
   })
+
+  it.effect("excludes .kbignore matches from projections and search", () => {
+    const state: TestFileSystemState = {
+      files: {
+        [`${testRoot}/.kbignore`]: ["# Intentional repository instruction file", "AGENTS.md"].join("\n"),
+        [`${testRoot}/AGENTS.md`]: "# Vault agent instructions #agent",
+        [`${testRoot}/Notes/Kept.md`]: "# Kept Note #kept\nSee [[AGENTS]]."
+      },
+      writes: 0,
+      reads: 0
+    }
+
+    return Effect.gen(function* () {
+      const vaultService = yield* VaultService
+      const vault = yield* vaultService.scoped(fromPath("."))
+
+      const notes = toArray(yield* vault.notes())
+      const headings = toArray(yield* vault.headings())
+      const ignoredContentResults = toArray(yield* vault.search(fromPath("."), "instructions"))
+      const keptResults = toArray(yield* vault.search(fromPath("."), "kept"))
+
+      assert.deepStrictEqual(
+        notes.map((note) => note.path),
+        ["Notes/Kept.md"]
+      )
+      assert.deepStrictEqual(
+        headings.map((heading) => [heading.path, heading.text]),
+        [["Notes/Kept.md", "Kept Note #kept"]]
+      )
+      assert.deepStrictEqual(
+        ignoredContentResults.map((result) => [result._tag, result.path, result.text]),
+        []
+      )
+      assert.deepStrictEqual(
+        keptResults.map((result) => [result._tag, result.path, result.text]),
+        [
+          ["Note", "Notes/Kept.md", "Kept"],
+          ["Heading", "Notes/Kept.md", "Kept Note #kept"],
+          ["Tag", "Notes/Kept.md", "#kept"],
+          ["Tag", "Notes/Kept.md", "#kept"]
+        ]
+      )
+    }).pipe(Effect.provide(vaultLayer(state)))
+  })
   it.effect("reuses cached projection inputs across repeated scoped facades", () => {
     const state: TestFileSystemState = {
       files: {
@@ -197,7 +241,7 @@ describe("Vault", () => {
         secondTasks.map((task) => [task.path, task.text]),
         [["Notes/Tasks.md", "Keep cached"]]
       )
-      assert.strictEqual(readsAfterFirstProjection, 1)
+      assert.strictEqual(readsAfterFirstProjection, 2)
       assert.strictEqual(state.reads, readsAfterFirstProjection)
     }).pipe(Effect.provide(vaultLayer(state)))
   })

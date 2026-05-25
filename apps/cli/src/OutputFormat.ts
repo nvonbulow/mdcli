@@ -6,7 +6,7 @@ import { Flag } from "effect/unstable/cli"
 
 export const vaultFlag = Flag.directory("vault", { mustExist: true }).pipe(
   Flag.withDescription("Markdown vault root"),
-  Flag.withDefault("./vault")
+  Flag.optional
 )
 
 export const formatFlag = Flag.choice("format", ["pretty", "markdown", "json"] as const).pipe(

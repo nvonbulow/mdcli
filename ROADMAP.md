@@ -12,8 +12,23 @@ These are intentionally deferred. Do not implement them as part of the current v
   - Keep this in package services so CLI commands stay thin.
 - [x] P0: Add baseline read-only `kb check`
   - Start with broken wikilinks, ambiguous wikilinks from top-level headings, duplicate top-level headings, title/path/frontmatter drift, archive heading uniqueness, and stranded `vault/dump.md` content.
+- [x] P0: Fix `kb check` parser/analyzer false positives
+  - Treat wikilinks such as `[[sources/resource-name]]` as valid relative links when they resolve from the linking note's directory.
+  - Restrict title-drift frontmatter matching to canonical title fields such as `title`; do not require `topic` to match the note basename.
+  - Replace the current `topic` title-drift behavior with a resource-location sanity check: `topic` should agree with the resource folder/category convention, not the file title.
+  - Add a vault check ignore file, similar to `.gitignore`, for intentional non-note files and specific findings; use it to exclude files such as `AGENTS.md` from note title-drift checks without weakening checks globally.
+  - Add regression tests for relative source-copy links, resource `topic` metadata, and ignore-file behavior.
+- [x] P0: set up config file/environment variables (using effect's config system) to set a default vault path instead of assuming `./vault`
+- [ ] P0: Allow wikilinks to references headings within the linked file
+  - For example `[[#heading]]` links to a heading within the same file. `[[#heading#subheading]]` references a subheading, and `[[Note#heading]]` references a heading in a different file. Checks will need to be updated to follow heading references.
+  - Remark plugin should also be updated to parse new formats accordingly
 - [ ] P0: Add safe `kb note rename <path-or-title> <new-title>`
   - Resolve source notes uniquely, update path/title/references, preserve aliases where possible, and support dry-run or preview before applying.
+- [ ] P1: Add AI weekly/monthly summaries
+  - Generate review drafts from daily logs, task history, and project context; keep this separate from deterministic checks.
+- [ ] P1: Add AI missing-follow-up/theme detection
+  - Produce suggestions only, not direct edits.
+- [ ] P1: Add logging throughout the codebase (with different levels of course)
 - [ ] P1: Add `kb task similar <text>`
   - Use deterministic token overlap to prevent duplicate tasks during ingestion.
 - [ ] P1: Add richer fearless metadata edits through the remark plugin
@@ -36,10 +51,6 @@ These are intentionally deferred. Do not implement them as part of the current v
   - Support list-item events with `[type:: event]`, typed date/start/end fields, and page-level inheritance.
 - [ ] P4: Add `kb event today/week/open`
   - Render agenda/calendar-style views while keeping events out of task overdue, completion, and carryover semantics.
-- [ ] P5: Add AI weekly/monthly summaries
-  - Generate review drafts from daily logs, task history, and project context; keep this separate from deterministic checks.
-- [ ] P5: Add AI missing-follow-up/theme detection
-  - Produce suggestions only, not direct edits.
 
 Suggested implementation sequence:
 

@@ -324,6 +324,9 @@ importers:
       glob:
         specifier: ^13.0.6
         version: 13.0.6
+      minimatch:
+        specifier: ^10.2.5
+        version: 10.2.5
       remark-frontmatter:
         specifier: ^5.0.0
         version: 5.0.0

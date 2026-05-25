@@ -9,11 +9,12 @@ import {
   MarkdownDataviewRenderer,
   MarkdownFenceParser
 } from "@kb/dataview"
-import { CalendarService, CheckService, Glob, VaultService } from "@kb/vault"
-import { Effect } from "effect"
+import { CalendarService, CheckService, Glob } from "@kb/vault"
+import { Console, Effect } from "effect"
 import { Command } from "effect/unstable/cli"
 import { DashboardCommand } from "./DashboardCommand"
 import { CheckCommand } from "./CheckCommand"
+import { vaultServiceLayerFromFlags } from "./KbConfig"
 import { rendererLayerForFormat } from "./OutputFormat"
 import { QueryCommand } from "./QueryCommand"
 import { KbRoot } from "./RootCommand"
@@ -30,11 +31,14 @@ const KbCommand = KbRoot.pipe(
   Command.provide(MarkdownFenceParser.layerNoDeps),
   Command.provide(CalendarService.layerLive),
   Command.provide(CheckService.layer),
-  Command.provide((flags) => VaultService.makeLayer({ root: flags.vault })),
+  Command.provide((flags) => vaultServiceLayerFromFlags(flags.vault)),
   Command.provide(Glob.layer),
   Command.provide((flags) => rendererLayerForFormat(flags.format))
 )
 
-const program = KbCommand.pipe(Command.run({ version: "0.1.0" }))
+const program = KbCommand.pipe(
+  Command.run({ version: "0.1.0" }),
+  Effect.tapError((error) => Console.error(error instanceof Error ? error.message : String(error)))
+)
 
 NodeRuntime.runMain(program.pipe(Effect.provide(NodeServices.layer)), { disableErrorReporting: true })

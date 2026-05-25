@@ -13,6 +13,7 @@ import {
   Trie
 } from "effect"
 import type { PlatformError } from "effect/PlatformError"
+import { Minimatch } from "minimatch"
 import * as Glob from "./Glob"
 import { MarkdownFile, type MarkdownTree } from "./markdown/MarkdownModel"
 import { MarkdownParser } from "./markdown/MarkdownParser"
@@ -68,6 +69,11 @@ const makeVaultService = (root: string) =>
       return yield* mapIoError("readText", normalizedPath, fs.readFileString(fullPath))
     })
 
+    const kbIgnoreCache = yield* Cache.makeWith<string, ReadonlyArray<KbIgnoreRule>, VaultIoError>(
+      () => readKbIgnore(readText),
+      { capacity: 1 }
+    )
+
     const markdownCache = yield* Cache.makeWith<string, Result.Result<MarkdownFile, MarkdownParseError>, VaultIoError>(
       (path) =>
         Effect.gen(function* () {
@@ -121,7 +127,10 @@ const makeVaultService = (root: string) =>
                 })
             )
           )
-        const markdownFiles = sortedUniqueMarkdownPaths(matches)
+        const markdownFiles = filterIgnoredMarkdownPaths(
+          sortedUniqueMarkdownPaths(matches),
+          yield* Cache.get(kbIgnoreCache, "")
+        )
 
         const files = yield* Effect.forEach(markdownFiles, (path) =>
           Cache.get(markdownCache, path).pipe(Effect.map((file) => [path, file] as const))
@@ -167,6 +176,9 @@ const makeVaultService = (root: string) =>
       const normalizedPath = normalizePath(path)
       const fullPath = pathService.join(root, normalizedPath)
       yield* mapIoError("writeText", normalizedPath, fs.writeFileString(fullPath, contents))
+      if (normalizedPath === ".kbignore") {
+        yield* Cache.invalidate(kbIgnoreCache, "")
+      }
       yield* Cache.invalidate(markdownCache, normalizedPath)
       yield* Cache.invalidate(noteFileCache, normalizedPath)
       yield* Cache.invalidate(frontmatterFileCache, normalizedPath)
@@ -329,6 +341,77 @@ const mapIoError = <A>(
         })
     )
   )
+
+type KbIgnoreRule = {
+  readonly negated: boolean
+  readonly matcher: Minimatch
+}
+
+const readKbIgnore = (readText: VaultServiceShape["readText"]): Effect.Effect<ReadonlyArray<KbIgnoreRule>, VaultIoError> =>
+  readText(".kbignore").pipe(
+    Effect.catchIf(isMissingKbIgnore, () => Effect.succeed("")),
+    Effect.map(parseKbIgnore)
+  )
+
+const parseKbIgnore = (contents: string): ReadonlyArray<KbIgnoreRule> => {
+  const rules: Array<KbIgnoreRule> = []
+  const lines = contents.split("\n")
+  for (const line of lines) {
+    const rule = parseKbIgnoreLine(line)
+    if (rule !== undefined) {
+      rules.push(rule)
+    }
+  }
+  return rules
+}
+
+const parseKbIgnoreLine = (line: string): KbIgnoreRule | undefined => {
+  const trimmed = line.trim()
+  if (trimmed.length === 0 || trimmed.startsWith("#")) {
+    return undefined
+  }
+  const negated = trimmed.startsWith("!")
+  const pattern = negated ? trimmed.slice(1) : trimmed
+  if (pattern.length === 0) {
+    return undefined
+  }
+  return {
+    negated,
+    matcher: new Minimatch(normalizeKbIgnorePattern(pattern), {
+      dot: true,
+      matchBase: !pattern.includes("/")
+    })
+  }
+}
+
+const filterIgnoredMarkdownPaths = (
+  paths: ReadonlyArray<string>,
+  rules: ReadonlyArray<KbIgnoreRule>
+): Array<string> => {
+  if (rules.length === 0) {
+    return Array.from(paths)
+  }
+  return paths.filter((path) => !isIgnoredPath(path, rules))
+}
+
+const isIgnoredPath = (path: string, rules: ReadonlyArray<KbIgnoreRule>): boolean => {
+  let ignored = false
+  for (const rule of rules) {
+    if (rule.matcher.match(path)) {
+      ignored = !rule.negated
+    }
+  }
+  return ignored
+}
+
+const normalizeKbIgnorePattern = (pattern: string): string => {
+  const normalized = normalizePath(pattern)
+  const unrooted = normalized.startsWith("/") ? normalized.slice(1) : normalized
+  return unrooted.endsWith("/") ? `${unrooted}**` : unrooted
+}
+
+const isMissingKbIgnore = (error: VaultIoError): boolean =>
+  error.operation === "readText" && error.path === ".kbignore" && /ENOENT|no such file|not\s*found/i.test(error.message)
 
 const normalizePath = (path: string): string => Str.replaceAll("\\", "/")(path)
 const sortedUniqueMarkdownPaths = (paths: ReadonlyArray<string>): Array<string> => {

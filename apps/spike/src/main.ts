@@ -9,37 +9,20 @@ import type { Root } from "mdast"
 import remarkFrontmatter from "remark-frontmatter"
 import remarkStringify from "remark-stringify"
 
-import * as Ast from "./ast"
+import * as Markdown from "./markdown"
 const COMPLETED_DATE = "2026-05-26"
 const COMPLETED_FIELD_KEY = "completed"
 const COMPLETED_FIELD_ORIGINAL = `[completed:: ${COMPLETED_DATE}]`
 
-interface MutableTextNode {
-  type: "text"
-  value: string
-}
+type Mutable<T> = T extends unknown ? { -readonly [K in keyof T]: T[K] } : never
+type MutableWithChildren<T extends { readonly children: ReadonlyArray<Markdown.MarkdownNode> }> =
+  Omit<Mutable<T>, "children"> & { children: MutablePhrasingNode[] }
 
-interface MutableObsidianInlineField {
-  type: "obsidianInlineField"
-  key: string
-  value: string
-  original: string
-  valueStart: number
-  valueEnd: number
-}
-
-type MutablePhrasingNode = MutableTextNode | MutableObsidianInlineField | { type: string }
-
-interface MutableParagraph {
-  type: "paragraph"
-  children: MutablePhrasingNode[]
-}
-
-interface MutableTaskListItem {
-  type: "listItem"
-  checked: boolean
-  children: Array<MutableParagraph | { type: string }>
-}
+type MutableTextNode = Mutable<Markdown.MarkdownText>
+type MutableObsidianInlineField = Mutable<Markdown.MarkdownObsidianInlineField>
+type MutablePhrasingNode = Mutable<Markdown.MarkdownNode>
+type MutableParagraph = MutableWithChildren<Markdown.MarkdownParagraph>
+type MutableTaskListItem = Omit<MutableWithChildren<Markdown.MarkdownListItem>, "checked"> & { checked: boolean }
 
 const processor = unified()
   .use(remarkParse)
@@ -50,39 +33,34 @@ const processor = unified()
 
 const parseAndRun = (markdown: string) =>
   Effect.try({
-    try: () => processor.runSync(processor.parse(markdown)) as Root,
+    try: () => Markdown.fromMdast(processor.runSync(processor.parse(markdown)) as Root),
     catch: () => "parse/run failed"
-  }).pipe(Effect.map(Ast.make))
+  })
 
-const stringify = (ast: Ast.Ast<Root>) =>
+const stringify = (root: Markdown.MarkdownRoot) =>
   Effect.try({
-    try: () => processor.stringify(ast.node),
+    try: () => processor.stringify(root as unknown as Root),
     catch: () => "stringify failed"
   })
 
-const isTaskListItem = (node: unknown): node is MutableTaskListItem =>
-  typeof node === "object" &&
-  node !== null &&
-  "type" in node &&
-  node.type === "listItem" &&
-  "checked" in node &&
-  typeof node.checked === "boolean" &&
-  "children" in node &&
-  Array.isArray(node.children)
+const visitMutable = (node: Markdown.MarkdownNode, f: (node: Markdown.MarkdownNode) => void): void => {
+  f(node)
+  if (Markdown.isParent(node)) {
+    node.children.forEach((child: Markdown.MarkdownNode) => visitMutable(child, f))
+  }
+}
 
-const isParagraph = (node: unknown): node is MutableParagraph =>
-  typeof node === "object" &&
-  node !== null &&
-  "type" in node &&
-  node.type === "paragraph" &&
-  "children" in node &&
-  Array.isArray(node.children)
+const isTaskListItem = (node: Markdown.MarkdownNode): node is MutableTaskListItem =>
+  Markdown.MarkdownNode.$is("ListItem")(node) && typeof node.checked === "boolean"
+
+const isParagraph = (node: Markdown.MarkdownNode | undefined): node is MutableParagraph =>
+  node !== undefined && Markdown.MarkdownNode.$is("Paragraph")(node)
 
 const isTextNode = (node: MutablePhrasingNode): node is MutableTextNode =>
-  node.type === "text" && "value" in node && typeof node.value === "string"
+  Markdown.MarkdownNode.$is("Text")(node)
 
 const isObsidianInlineField = (node: MutablePhrasingNode): node is MutableObsidianInlineField =>
-  node.type === "obsidianInlineField" &&
+  Markdown.MarkdownNode.$is("ObsidianInlineField")(node) &&
   "key" in node &&
   typeof node.key === "string" &&
   "value" in node &&
@@ -97,14 +75,15 @@ const isObsidianInlineField = (node: MutablePhrasingNode): node is MutableObsidi
 const isCompletedField = (node: MutablePhrasingNode): node is MutableObsidianInlineField =>
   isObsidianInlineField(node) && node.key === COMPLETED_FIELD_KEY
 
-const completedField = (): MutableObsidianInlineField => ({
-  type: "obsidianInlineField",
-  key: COMPLETED_FIELD_KEY,
-  value: COMPLETED_DATE,
-  original: COMPLETED_FIELD_ORIGINAL,
-  valueStart: COMPLETED_FIELD_KEY.length + 4,
-  valueEnd: COMPLETED_FIELD_KEY.length + 4 + COMPLETED_DATE.length
-})
+const completedField = (): MutableObsidianInlineField =>
+  Markdown.MarkdownNode.ObsidianInlineField({
+    type: "obsidianInlineField",
+    key: COMPLETED_FIELD_KEY,
+    value: COMPLETED_DATE,
+    original: COMPLETED_FIELD_ORIGINAL,
+    valueStart: COMPLETED_FIELD_KEY.length + 4,
+    valueEnd: COMPLETED_FIELD_KEY.length + 4 + COMPLETED_DATE.length
+  })
 
 const updateCompletedField = (field: MutableObsidianInlineField): void => {
   field.value = COMPLETED_DATE
@@ -184,7 +163,7 @@ const appendCompletedField = (paragraph: MutableParagraph): void => {
     if (blockIdStart !== undefined) {
       const blockId = last.value.slice(blockIdStart)
       last.value = last.value.slice(0, blockIdStart)
-      paragraph.children.push({ type: "text", value: " " }, field, { type: "text", value: blockId })
+      paragraph.children.push(Markdown.MarkdownNode.Text({ type: "text", value: " " }), field, Markdown.MarkdownNode.Text({ type: "text", value: blockId }))
       return
     }
     if (last.value.endsWith(" ")) {
@@ -192,7 +171,7 @@ const appendCompletedField = (paragraph: MutableParagraph): void => {
       return
     }
   }
-  paragraph.children.push({ type: "text", value: " " }, field)
+  paragraph.children.push(Markdown.MarkdownNode.Text({ type: "text", value: " " }), field)
 }
 
 const ensureCompletedField = (paragraph: MutableParagraph): void => {
@@ -232,15 +211,13 @@ const Task = {
 const program = Effect.gen(function* () {
   const fs = yield* FileSystem
 
-  const ast = yield* fs.readFileString("./test.md").pipe(Effect.flatMap(parseAndRun))
-  const invertedAst = Ast.mutate(ast, (mutable) => {
-    Ast.visitMutable(mutable, (node) => {
-      if (Task.is(node.node)) {
-        Task.invertCompletion(node.node)
-      }
-    })
+  const taggedRoot = yield* fs.readFileString("./test.md").pipe(Effect.flatMap(parseAndRun))
+  visitMutable(taggedRoot, (node) => {
+    if (Task.is(node)) {
+      Task.invertCompletion(node)
+    }
   })
-  const markdown = yield* stringify(invertedAst)
+  const markdown = yield* stringify(taggedRoot)
   yield* Console.log(markdown)
 })
 

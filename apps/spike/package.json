@@ -8,8 +8,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@effect/platform-node": "beta",
-    "@kb/remark-obsidian": "workspace:*",
+    "@effect/platform-node": "^4.0.0-beta.72",
     "effect": "beta",
     "remark-frontmatter": "^5.0.0",
     "remark-gfm": "^4.0.1",
@@ -18,15 +17,23 @@
     "unified": "^11.0.5",
     "unist-util-visit": "^5.1.0",
     "unist-util-visit-parents": "^6.0.2",
-    "vfile": "^6.0.3"
+    "vfile": "^6.0.3",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@types/mdast": "^4.0.4",
-    "@types/node": "^24.10.1",
+    "@types/node": "^24.12.4",
     "@types/unist": "^3.0.3",
     "@types/vfile": "^4.0.0",
-    "tsx": "^4.20.6",
+    "tsx": "^4.22.3",
     "typescript": "^5.9.3",
-    "vitest": "^4.0.13"
+    "vitest": "^4.1.7"
+  },
+  "aube": {
+    "allowBuilds": {
+      "@parcel/watcher": true,
+      "esbuild": true,
+      "msgpackr-extract": true
+    }
   }
 }

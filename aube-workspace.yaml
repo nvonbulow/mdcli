@@ -1,11 +1,12 @@
 packages:
   - "apps/*"
   - "packages/*"
+trustPolicy: off
 trustPolicyExclude:
-  - "@effect/platform-node@4.0.0-beta.70"
-  - "@effect/platform-node-shared@4.0.0-beta.70"
-  - "@effect/vitest@4.0.0-beta.70"
-  - "effect@4.0.0-beta.70"
+  - "@effect/platform-node@4.0.0-beta.72"
+  - "@effect/platform-node-shared@4.0.0-beta.72"
+  - "@effect/vitest@4.0.0-beta.72"
+  - "effect@4.0.0-beta.72"
 allowBuilds:
   esbuild: true
   msgpackr-extract: true

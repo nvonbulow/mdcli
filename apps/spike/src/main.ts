@@ -7,7 +7,7 @@ import { unified } from "unified"
 import type { Root } from "mdast"
 import remarkFrontmatter from "remark-frontmatter"
 import remarkStringify from "remark-stringify"
-import { Schema } from "effect"
+import { Schema, Match } from "effect"
 
 import * as Markdown from "./markdown"
 

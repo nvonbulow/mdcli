@@ -98,7 +98,7 @@ describe("Markdown traversal", () => {
     }
 
     assert.deepEqual(
-      Markdown.findAll(tree, (cursor) => cursor.node._tag === "ParagraphNode").map((cursor) => cursor.index),
+      Array.from(Markdown.findAll(tree, (cursor) => cursor.node._tag === "ParagraphNode"), (cursor) => cursor.index),
       [0, 1]
     )
   })

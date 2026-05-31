@@ -30,7 +30,7 @@ type PositionField = typeof PositionField.Type
 type NodeFields<Type extends string, Tag extends string> = {
   readonly _tag: Tag
   readonly type: Type
-  readonly position: PositionField
+  readonly position?: PositionField
 }
 
 type ParentFields<Type extends string, Tag extends string, Child> = NodeFields<Type, Tag> & {
@@ -43,7 +43,7 @@ type LiteralFields<Type extends string, Tag extends string, Value> = NodeFields<
 
 export const BaseNode = Schema.Struct({
   type: Schema.String,
-  position: PositionField
+  position: Schema.optionalKey(PositionField)
 })
 export type BaseNode = typeof BaseNode.Type
 
@@ -122,6 +122,18 @@ export interface ListItemNode extends ParentFields<"listItem", "ListItemNode", B
   readonly spread: Option.Option<boolean>
 }
 export interface ParagraphNode extends ParentFields<"paragraph", "ParagraphNode", PhrasingContentNode> {}
+export interface WikilinkNode extends LiteralFields<"wikilink", "WikilinkNode", string> {
+  readonly target: string
+  readonly header: Option.Option<string>
+  readonly block: Option.Option<string>
+  readonly alias: Option.Option<string>
+  readonly embed: Option.Option<boolean>
+  readonly original: string
+}
+export interface BlockAnchorNode extends LiteralFields<"blockAnchor", "BlockAnchorNode", string> {
+  readonly id: string
+  readonly original: string
+}
 export interface StrongNode extends ParentFields<"strong", "StrongNode", PhrasingContentNode> {}
 export interface TableNode extends ParentFields<"table", "TableNode", TableContentNode> {
   readonly align: Option.Option<ReadonlyArray<typeof AlignType.Type>>
@@ -148,6 +160,7 @@ export type BlockDefinitionContentNode = BlockContentNode | DefinitionContentNod
 export type ListContentNode = ListItemNode
 
 export type PhrasingContentNode =
+  | BlockAnchorNode
   | BreakNode
   | DeleteNode
   | EmphasisNode
@@ -160,9 +173,11 @@ export type PhrasingContentNode =
   | LinkReferenceNode
   | StrongNode
   | TextNode
+  | WikilinkNode
 
 export type RootContentNode =
   | BlockquoteNode
+  | BlockAnchorNode
   | BreakNode
   | CodeNode
   | DefinitionNode
@@ -186,6 +201,7 @@ export type RootContentNode =
   | TableRowNode
   | TextNode
   | ThematicBreakNode
+  | WikilinkNode
   | YamlFrontmatterNode
 
 export type RowContentNode = TableCellNode
@@ -193,6 +209,7 @@ export type TableContentNode = TableRowNode
 
 export type AnyNode =
   | BlockquoteNode
+  | BlockAnchorNode
   | BreakNode
   | CodeNode
   | DefinitionNode
@@ -217,6 +234,7 @@ export type AnyNode =
   | TableRowNode
   | TextNode
   | ThematicBreakNode
+  | WikilinkNode
   | YamlFrontmatterNode
 
 type EncodedOption<Value> = Value | null | undefined
@@ -340,6 +358,24 @@ type ParagraphNodeEncoded = BaseNode &
     readonly type: "paragraph"
     readonly children: ReadonlyArray<PhrasingContentNodeEncoded>
   }
+type WikilinkNodeEncoded = BaseNode &
+  EncodedTag<"WikilinkNode"> & {
+    readonly type: "wikilink"
+    readonly value: string
+    readonly target: string
+    readonly header?: string
+    readonly block?: string
+    readonly alias?: string
+    readonly embed?: boolean
+    readonly original: string
+  }
+type BlockAnchorNodeEncoded = BaseNode &
+  EncodedTag<"BlockAnchorNode"> & {
+    readonly type: "blockAnchor"
+    readonly value: string
+    readonly id: string
+    readonly original: string
+  }
 type StrongNodeEncoded = BaseNode &
   EncodedTag<"StrongNode"> & {
     readonly type: "strong"
@@ -391,6 +427,7 @@ type BlockDefinitionContentNodeEncoded = BlockContentNodeEncoded | DefinitionCon
 type ListContentNodeEncoded = ListItemNodeEncoded
 
 type PhrasingContentNodeEncoded =
+  | BlockAnchorNodeEncoded
   | BreakNodeEncoded
   | DeleteNodeEncoded
   | EmphasisNodeEncoded
@@ -403,9 +440,11 @@ type PhrasingContentNodeEncoded =
   | LinkReferenceNodeEncoded
   | StrongNodeEncoded
   | TextNodeEncoded
+  | WikilinkNodeEncoded
 
 type RootContentNodeEncoded =
   | BlockquoteNodeEncoded
+  | BlockAnchorNodeEncoded
   | BreakNodeEncoded
   | CodeNodeEncoded
   | DefinitionNodeEncoded
@@ -429,12 +468,14 @@ type RootContentNodeEncoded =
   | TableRowNodeEncoded
   | TextNodeEncoded
   | ThematicBreakNodeEncoded
+  | WikilinkNodeEncoded
   | YamlFrontmatterNodeEncoded
 
 type RowContentNodeEncoded = TableCellNodeEncoded
 type TableContentNodeEncoded = TableRowNodeEncoded
 type AnyNodeEncoded =
   | BlockquoteNodeEncoded
+  | BlockAnchorNodeEncoded
   | BreakNodeEncoded
   | CodeNodeEncoded
   | DefinitionNodeEncoded
@@ -459,6 +500,7 @@ type AnyNodeEncoded =
   | TableRowNodeEncoded
   | TextNodeEncoded
   | ThematicBreakNodeEncoded
+  | WikilinkNodeEncoded
   | YamlFrontmatterNodeEncoded
 
 const BlockDefinitionContentNodeRef: Schema.Codec<BlockDefinitionContentNode, BlockDefinitionContentNodeEncoded> =
@@ -641,6 +683,36 @@ export const ParagraphNode: Schema.Codec<ParagraphNode, ParagraphNodeEncoded> = 
   children: Schema.Array(PhrasingContentNodeRef)
 })
 
+export const WikilinkNode: Schema.Codec<WikilinkNode, WikilinkNodeEncoded> = Schema.Struct({
+  ...BaseNode.fields,
+  _tag: Schema.tagDefaultOmit("WikilinkNode"),
+  type: Schema.tag("wikilink"),
+  value: Schema.String,
+  target: Schema.String,
+  header: Schema.optionalKey(Schema.String).pipe(
+    Schema.decodeTo(Schema.Option(Schema.String), SchemaTransformation.optionFromOptionalKey())
+  ),
+  block: Schema.optionalKey(Schema.String).pipe(
+    Schema.decodeTo(Schema.Option(Schema.String), SchemaTransformation.optionFromOptionalKey())
+  ),
+  alias: Schema.optionalKey(Schema.String).pipe(
+    Schema.decodeTo(Schema.Option(Schema.String), SchemaTransformation.optionFromOptionalKey())
+  ),
+  embed: Schema.optionalKey(Schema.Boolean).pipe(
+    Schema.decodeTo(Schema.Option(Schema.Boolean), SchemaTransformation.optionFromOptionalKey())
+  ),
+  original: Schema.String
+})
+
+export const BlockAnchorNode: Schema.Codec<BlockAnchorNode, BlockAnchorNodeEncoded> = Schema.Struct({
+  ...BaseNode.fields,
+  _tag: Schema.tagDefaultOmit("BlockAnchorNode"),
+  type: Schema.tag("blockAnchor"),
+  value: Schema.String,
+  id: Schema.String,
+  original: Schema.String
+})
+
 export const StrongNode: Schema.Codec<StrongNode, StrongNodeEncoded> = Schema.Struct({
   ...BaseNode.fields,
   _tag: Schema.tagDefaultOmit("StrongNode"),
@@ -714,6 +786,7 @@ export const BlockDefinitionContentNode: Schema.Codec<BlockDefinitionContentNode
 export const ListContentNode: Schema.Codec<ListContentNode, ListContentNodeEncoded> = ListItemNode
 
 export const PhrasingContentNode: Schema.Codec<PhrasingContentNode, PhrasingContentNodeEncoded> = Schema.Union([
+  BlockAnchorNode,
   BreakNode,
   DeleteNode,
   EmphasisNode,
@@ -725,10 +798,12 @@ export const PhrasingContentNode: Schema.Codec<PhrasingContentNode, PhrasingCont
   LinkNode,
   LinkReferenceNode,
   StrongNode,
-  TextNode
+  TextNode,
+  WikilinkNode
 ]).pipe(Schema.toTaggedUnion("_tag"))
 
 export const RootContentNode: Schema.Codec<RootContentNode, RootContentNodeEncoded> = Schema.Union([
+  BlockAnchorNode,
   BlockquoteNode,
   BreakNode,
   CodeNode,
@@ -753,6 +828,7 @@ export const RootContentNode: Schema.Codec<RootContentNode, RootContentNodeEncod
   TableRowNode,
   TextNode,
   ThematicBreakNode,
+  WikilinkNode,
   YamlFrontmatterNode
 ]).pipe(Schema.toTaggedUnion("_tag"))
 
@@ -762,6 +838,7 @@ export const TableContentNode: Schema.Codec<TableContentNode, TableContentNodeEn
 
 export const AnyNode: Schema.Codec<AnyNode, AnyNodeEncoded> = Schema.Union([
   BlockquoteNode,
+  BlockAnchorNode,
   BreakNode,
   CodeNode,
   DefinitionNode,
@@ -786,5 +863,6 @@ export const AnyNode: Schema.Codec<AnyNode, AnyNodeEncoded> = Schema.Union([
   TableRowNode,
   TextNode,
   ThematicBreakNode,
+  WikilinkNode,
   YamlFrontmatterNode
 ]).pipe(Schema.toTaggedUnion("_tag"))

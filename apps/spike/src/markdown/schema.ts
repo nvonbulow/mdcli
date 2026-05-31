@@ -701,15 +701,15 @@ export const BlockContentNode: Schema.Codec<BlockContentNode, BlockContentNodeEn
   ParagraphNode,
   TableNode,
   ThematicBreakNode
-])
+]).pipe(Schema.toTaggedUnion("_tag"))
 
 export const DefinitionContentNode: Schema.Codec<DefinitionContentNode, DefinitionContentNodeEncoded> = Schema.Union([
   DefinitionNode,
   FootnoteDefinitionNode
-])
+]).pipe(Schema.toTaggedUnion("_tag"))
 
 export const BlockDefinitionContentNode: Schema.Codec<BlockDefinitionContentNode, BlockDefinitionContentNodeEncoded> =
-  Schema.Union([BlockContentNode, DefinitionContentNode])
+  Schema.Union([BlockContentNode, DefinitionContentNode]).pipe(Schema.toTaggedUnion("_tag"))
 
 export const ListContentNode: Schema.Codec<ListContentNode, ListContentNodeEncoded> = ListItemNode
 
@@ -726,7 +726,7 @@ export const PhrasingContentNode: Schema.Codec<PhrasingContentNode, PhrasingCont
   LinkReferenceNode,
   StrongNode,
   TextNode
-])
+]).pipe(Schema.toTaggedUnion("_tag"))
 
 export const RootContentNode: Schema.Codec<RootContentNode, RootContentNodeEncoded> = Schema.Union([
   BlockquoteNode,
@@ -754,7 +754,7 @@ export const RootContentNode: Schema.Codec<RootContentNode, RootContentNodeEncod
   TextNode,
   ThematicBreakNode,
   YamlFrontmatterNode
-])
+]).pipe(Schema.toTaggedUnion("_tag"))
 
 export const RowContentNode: Schema.Codec<RowContentNode, RowContentNodeEncoded> = TableCellNode
 
@@ -787,4 +787,4 @@ export const AnyNode: Schema.Codec<AnyNode, AnyNodeEncoded> = Schema.Union([
   TextNode,
   ThematicBreakNode,
   YamlFrontmatterNode
-])
+]).pipe(Schema.toTaggedUnion("_tag"))

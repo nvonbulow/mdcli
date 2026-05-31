@@ -1,5 +1,5 @@
 import { NodeRuntime, NodeServices } from "@effect/platform-node"
-import { Effect, Schema } from "effect"
+import { Effect, Iterable, Schema } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import remarkGfm from "remark-gfm"
 import remarkParse from "remark-parse"
@@ -27,12 +27,19 @@ const stringify = (root: Root) =>
 const program = Effect.gen(function* () {
   const fs = yield* FileSystem
 
-  const taggedRoot = yield* fs.readFileString("./test.md").pipe(
-    Effect.flatMap(parseAndRun),
-    Effect.flatMap(Schema.decodeUnknownEffect(Markdown.Root)),
-    Effect.flatMap(Markdown.visit((node) => Effect.logInfo(node._tag)))
-    // test
-  )
+  const taggedRoot = yield* fs
+    .readFileString("./test.md")
+    .pipe(Effect.flatMap(parseAndRun), Effect.flatMap(Schema.decodeUnknownEffect(Markdown.Root)))
+
+  const textNodes = Markdown.findAll(taggedRoot, ({ node }) => node._tag === "TextNode")
+
+  for (let cursor of textNodes) {
+    if (!(cursor.node._tag === "TextNode")) {
+      continue
+    }
+    yield* Effect.logInfo(cursor.node.value)
+  }
+
   // const markdown = yield* stringify(taggedRoot as any)
   // const listNode: Markdown.ListNode = taggedRoot.children[5] as any
   // listNode.children

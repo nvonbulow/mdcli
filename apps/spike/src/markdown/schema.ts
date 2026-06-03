@@ -136,7 +136,7 @@ export interface BlockAnchorNode extends LiteralFields<"blockAnchor", "BlockAnch
 }
 export interface StrongNode extends ParentFields<"strong", "StrongNode", PhrasingContentNode> {}
 export interface TableNode extends ParentFields<"table", "TableNode", TableContentNode> {
-  readonly align: Option.Option<ReadonlyArray<typeof AlignType.Type>>
+  readonly align: Option.Option<ReadonlyArray<typeof TableAlign.Type>>
 }
 export interface TableCellNode extends ParentFields<"tableCell", "TableCellNode", PhrasingContentNode> {}
 export interface TableRowNode extends ParentFields<"tableRow", "TableRowNode", RowContentNode> {}
@@ -384,7 +384,7 @@ type StrongNodeEncoded = BaseNode &
 type TableNodeEncoded = BaseNode &
   EncodedTag<"TableNode"> & {
     readonly type: "table"
-    readonly align: EncodedOption<ReadonlyArray<typeof AlignType.Type>>
+    readonly align: EncodedOption<ReadonlyArray<typeof TableAlign.Type>>
     readonly children: ReadonlyArray<TableContentNodeEncoded>
   }
 type TableCellNodeEncoded = BaseNode &
@@ -721,11 +721,12 @@ export const StrongNode: Schema.Codec<StrongNode, StrongNodeEncoded> = Schema.St
 })
 
 export const AlignType = Schema.Literals(["center", "left", "right"])
+export const TableAlign = Schema.NullOr(AlignType)
 export const TableNode: Schema.Codec<TableNode, TableNodeEncoded> = Schema.Struct({
   ...BaseNode.fields,
   _tag: Schema.tagDefaultOmit("TableNode"),
   type: Schema.tag("table"),
-  align: Schema.Array(AlignType).pipe(Schema.OptionFromNullishOr),
+  align: Schema.Array(TableAlign).pipe(Schema.OptionFromNullishOr),
   children: Schema.Array(TableContentNodeRef)
 })
 

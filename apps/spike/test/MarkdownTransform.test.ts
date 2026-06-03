@@ -1,5 +1,5 @@
 import { strict as assert } from "node:assert"
-import { Option } from "effect"
+import { Effect, Option } from "effect"
 import { describe, it } from "vitest"
 
 import * as Markdown from "../src/markdown"
@@ -171,5 +171,49 @@ describe("Markdown transforms", () => {
     assert.deepEqual(transformedText, ["charlie"])
     assert.equal(((result.children[1] as Markdown.ParagraphNode).children[0] as Markdown.TextNode).value, "CHARLIE")
     assert.equal(((result.children[0] as Markdown.ParagraphNode).children[0] as Markdown.TextNode).value, "alpha")
+  })
+
+  it("provides effectful variants for mapping, filtering, removing, and transforming", () => {
+    const mapped = Effect.runSync(
+      Markdown.mapEffect(makeTree(), (cursor) =>
+        Effect.succeed(
+          cursor.node._tag === "TextNode" && cursor.node.value === "alpha"
+            ? { ...cursor.node, value: "ALPHA" }
+            : cursor.node
+        )
+      )
+    ) as Markdown.Root
+    assert.equal(((mapped.children[0] as Markdown.ParagraphNode).children[0] as Markdown.TextNode).value, "ALPHA")
+
+    const filtered = expectSome(
+      Effect.runSync(
+        Markdown.filterEffect(makeTree(), (cursor) => Effect.succeed(cursor.node._tag !== "StrongNode"))
+      )
+    ) as Markdown.Root
+    assert.deepEqual(
+      (filtered.children[0] as Markdown.ParagraphNode).children.map((child) => child._tag),
+      ["TextNode"]
+    )
+
+    const removed = expectSome(
+      Effect.runSync(Markdown.removeEffect(makeTree(), (cursor) => Effect.succeed(cursor.node._tag === "StrongNode")))
+    ) as Markdown.Root
+    assert.deepEqual(
+      (removed.children[0] as Markdown.ParagraphNode).children.map((child) => child._tag),
+      ["TextNode"]
+    )
+
+    const transformed = expectSome(
+      Effect.runSync(
+        Markdown.transformEffect(makeTree(), (cursor) =>
+          Effect.succeed(
+            cursor.node._tag === "TextNode" && cursor.node.value === "charlie"
+              ? Markdown.TransformControl.Continue({ node: { ...cursor.node, value: "CHARLIE" } })
+              : Markdown.TransformControl.Continue({ node: cursor.node })
+          )
+        )
+      )
+    ) as Markdown.Root
+    assert.equal(((transformed.children[1] as Markdown.ParagraphNode).children[0] as Markdown.TextNode).value, "CHARLIE")
   })
 })

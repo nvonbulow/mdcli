@@ -1,32 +1,15 @@
 import { strict as assert } from "node:assert"
-import { Effect, Option, Schema } from "effect"
-import type { Root } from "mdast"
-import { remarkWikilinks } from "@kb/remark-wikilinks"
-import remarkFrontmatter from "remark-frontmatter"
-import remarkGfm from "remark-gfm"
-import remarkParse from "remark-parse"
-import remarkStringify from "remark-stringify"
-import { unified } from "unified"
+import { Effect, Option } from "effect"
 import { describe, it } from "vitest"
 
 import * as Markdown from "../src/markdown"
 
-const processor = unified()
-  .use(remarkParse)
-  .use(remarkFrontmatter, ["yaml"])
-  .use(remarkGfm)
-  .use(remarkWikilinks)
-  .use(remarkStringify, Markdown.markdownStringifyOptions)
 
-const parse = (source: string): Root => processor.runSync(processor.parse(source)) as Root
+const processor = Markdown.MarkdownProcessor.make()
 
-const decode = (source: string): Markdown.Root =>
-  Effect.runSync(Schema.decodeUnknownEffect(Markdown.Root)(parse(source)))
+const decode = (source: string): Markdown.Root => Effect.runSync(processor.parse(source))
 
-const stringify = (root: Markdown.Root): string => {
-  const encoded = Schema.encodeSync(Markdown.Root)(root)
-  return processor.stringify(encoded as Root)
-}
+const stringify = (root: Markdown.Root): string => Effect.runSync(processor.stringify(root))
 
 const optionValue = <Value>(option: Option.Option<Value>): Value | undefined =>
   Option.isSome(option) ? option.value : undefined

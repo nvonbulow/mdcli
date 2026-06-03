@@ -58,24 +58,42 @@ describe("Markdown traversal", () => {
     assert.equal(cursors[4]?.parents.map((parent) => parent._tag).join("/"), "Root/ParagraphNode/StrongNode")
   })
 
-  it("supports controlled traversal decisions", () => {
+  it("supports pure and effectful visitors", () => {
+    const visited: string[] = []
+    Markdown.visit(tree, (node) => {
+      visited.push(node._tag)
+    })
+
+    assert.deepEqual(visited, ["Root", "ParagraphNode", "TextNode", "StrongNode", "TextNode", "ParagraphNode", "TextNode"])
+
+    const visitedEffect: string[] = []
+    Effect.runSync(
+      Markdown.visitEffect(tree, (node) =>
+        Effect.sync(() => {
+          visitedEffect.push(node._tag)
+        })
+      )
+    )
+
+    assert.deepEqual(visitedEffect, visited)
+  })
+
+  it("supports pure and effectful controlled traversal decisions", () => {
     const skippedSeen: string[] = []
 
-    Effect.runSync(
-      Markdown.visitControlled(tree, (cursor) => {
-        skippedSeen.push(cursor.node._tag)
-        if (cursor.node._tag === "ParagraphNode" && cursor.index === 0) {
-          return Effect.succeed(Markdown.VisitControl.SkipChildren())
-        }
-        return Effect.succeed(Markdown.VisitControl.Continue())
-      })
-    )
+    Markdown.visitControlled(tree, (cursor) => {
+      skippedSeen.push(cursor.node._tag)
+      if (cursor.node._tag === "ParagraphNode" && cursor.index === 0) {
+        return Markdown.VisitControl.SkipChildren()
+      }
+      return Markdown.VisitControl.Continue()
+    })
 
     assert.deepEqual(skippedSeen, ["Root", "ParagraphNode", "ParagraphNode", "TextNode"])
 
     const stoppedSeen: string[] = []
     Effect.runSync(
-      Markdown.visitControlled(tree, (cursor) => {
+      Markdown.visitControlledEffect(tree, (cursor) => {
         stoppedSeen.push(cursor.node._tag)
         if (cursor.node._tag === "StrongNode") {
           return Effect.succeed(Markdown.VisitControl.Stop())
@@ -88,7 +106,7 @@ describe("Markdown traversal", () => {
   })
 
   it("finds the first matching cursor and collects all matching cursors", () => {
-    const found = Effect.runSync(Markdown.find(tree, (cursor) => cursor.node._tag === "StrongNode"))
+    const found = Markdown.find(tree, (cursor) => cursor.node._tag === "StrongNode")
 
     assert.equal(Option.isSome(found), true)
     if (Option.isSome(found)) {
@@ -99,6 +117,19 @@ describe("Markdown traversal", () => {
 
     assert.deepEqual(
       Array.from(Markdown.findAll(tree, (cursor) => cursor.node._tag === "ParagraphNode"), (cursor) => cursor.index),
+      [0, 1]
+    )
+
+    const foundEffect = Effect.runSync(
+      Markdown.findEffect(tree, (cursor) => Effect.succeed(cursor.node._tag === "StrongNode"))
+    )
+    assert.equal(Option.isSome(foundEffect), true)
+
+    const foundAllEffect = Effect.runSync(
+      Markdown.findAllEffect(tree, (cursor) => Effect.succeed(cursor.node._tag === "ParagraphNode"))
+    )
+    assert.deepEqual(
+      foundAllEffect.map((cursor) => cursor.index),
       [0, 1]
     )
   })

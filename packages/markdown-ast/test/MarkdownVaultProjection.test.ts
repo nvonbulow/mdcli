@@ -43,13 +43,38 @@ describe("Markdown vault projection helpers", () => {
     })
   })
 
-  it("preserves markdown syntax for inline data field values", () => {
+  it("preserves markdown service syntax for inline data field values", () => {
     const root = decode("- [ ] Send [area:: [[Personal]]] [anchor:: [[Parent#^anchor]]] [plain:: value]")
-    const fields = Array.from(Markdown.inlineDataFields(root))
-
-    assert.deepEqual(
-      fields.map(Markdown.inlineDataFieldValueMarkdown),
-      ["[[Personal]]", "[[Parent#^anchor]]", "value"]
+    const richRoot = decode("`code` *em* **strong** [link](https://example.com)")
+    const richParagraph = richRoot.children[0] as Markdown.ParagraphNode
+    const richField: Markdown.InlineDataFieldNode = {
+      _tag: "InlineDataFieldNode",
+      type: "inlineDataField",
+      delimiter: "square",
+      original: "[rich:: ...]",
+      children: [
+        {
+          _tag: "InlineDataFieldKeyNode",
+          type: "inlineDataFieldKey",
+          children: [{ _tag: "TextNode", type: "text", value: "rich" }]
+        },
+        {
+          _tag: "InlineDataFieldValueNode",
+          type: "inlineDataFieldValue",
+          children: richParagraph.children as ReadonlyArray<Markdown.InlineDataFieldContentNode>
+        }
+      ]
+    }
+    const fields = [...Array.from(Markdown.inlineDataFields(root)), richField]
+    const values = Effect.runSync(
+      Effect.forEach(fields, Markdown.inlineDataFieldValueMarkdown).pipe(Effect.provide(Markdown.MarkdownProcessor.layer))
     )
+
+    assert.deepEqual(values, [
+      "[[Personal]]",
+      "[[Parent#^anchor]]",
+      "value",
+      "`code` *em* **strong** [link](https://example.com)"
+    ])
   })
 })

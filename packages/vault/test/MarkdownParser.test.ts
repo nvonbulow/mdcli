@@ -1,10 +1,11 @@
 import { assert, describe, it } from "@effect/vitest"
-import { Chunk, Effect, Option } from "effect"
+import { MarkdownProcessor } from "@kb/markdown-ast"
+import { Chunk, Effect, Layer, Option } from "effect"
 import { Markdown } from "../src/markdown/Markdown"
 import { MarkdownParser } from "../src/markdown/MarkdownParser"
 import { Task } from "../src/TaskModel"
 
-const parserLayer = MarkdownParser.layer
+const parserLayer = Layer.mergeAll(MarkdownParser.layer, MarkdownProcessor.layer)
 
 const markdown = [
   "---",
@@ -73,7 +74,7 @@ describe("MarkdownParser", () => {
       const tags = Chunk.toReadonlyArray(Markdown.tags(file))
       const listItems = Chunk.toReadonlyArray(Markdown.listItems(file))
       const tasks = Chunk.toReadonlyArray(Markdown.tasks(file))
-      const parsedTasks = tasks.map(Task.from)
+      const parsedTasks = yield* Effect.forEach(tasks, Task.from)
       const blocks = Chunk.toReadonlyArray(Markdown.fencedBlocks(file))
 
       assert.strictEqual(headings.length, 1)

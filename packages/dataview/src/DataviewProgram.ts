@@ -1,7 +1,7 @@
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
-import type { MarkdownParseError, TaskParseError, VaultIoError } from "@kb/vault"
+import type { MarkdownParseError, MarkdownStringifyError, TaskParseError, VaultIoError } from "@kb/vault"
 import type { DataviewEvaluateError, DataviewParseError } from "./DataviewAst"
 import { DataviewEvaluator } from "./DataviewEvaluator"
 import { DataviewFunctionRegistry } from "./DataviewFunctionRegistry"
@@ -14,7 +14,7 @@ export type DataviewProgramService = {
     queryText: string
   ) => Effect.Effect<
     DataviewResult,
-    DataviewParseError | DataviewEvaluateError | VaultIoError | TaskParseError | MarkdownParseError
+    DataviewParseError | DataviewEvaluateError | VaultIoError | TaskParseError | MarkdownParseError | MarkdownStringifyError
   >
 }
 

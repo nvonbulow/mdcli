@@ -1,5 +1,5 @@
 import * as MarkdownAst from "@kb/markdown-ast"
-import { Option, Schema, String as Str } from "effect"
+import { Effect, Option, Schema, String as Str } from "effect"
 
 export const IsoDate = Schema.TemplateLiteral([Schema.Number, "-", Schema.Number, "-", Schema.Number])
 export type IsoDate = typeof IsoDate.Type
@@ -35,31 +35,35 @@ export class Task extends Schema.Class<Task>("@kb/vault/Task")({
   area: Schema.optionalKey(Schema.String),
   project: Schema.optionalKey(Schema.String)
 }) {
-  static from(node: MarkdownAst.ListItemNode): Option.Option<Task> {
-    const tags = taskTags(node)
-    if (!tags.includes(taskTag)) {
-      return Option.none()
-    }
+  static from(
+    node: MarkdownAst.ListItemNode
+  ): Effect.Effect<Option.Option<Task>, MarkdownAst.MarkdownStringifyError, MarkdownAst.MarkdownProcessor> {
+    return Effect.gen(function* () {
+      const tags = taskTags(node)
+      if (!tags.includes(taskTag)) {
+        return Option.none()
+      }
 
-    const fields = taskFields(node)
-    const unknownFields = taskUnknownFields(fields)
+      const fields = yield* taskFields(node)
+      const unknownFields = taskUnknownFields(fields)
 
-    return Option.some(
-      new Task({
-        done: checked(node),
-        text: taskText(node),
-        fields,
-        unknownFields,
-        tags,
-        ...dateField("scheduled", fields.scheduled),
-        ...dateField("due", fields.due),
-        ...dateField("completed", fields.completed),
-        ...(fields.depends === undefined ? {} : { depends: fields.depends }),
-        ...(fields.repeat === undefined ? {} : { repeat: fields.repeat }),
-        ...(fields.area === undefined ? {} : { area: fields.area }),
-        ...(fields.project === undefined ? {} : { project: fields.project })
-      })
-    )
+      return Option.some(
+        new Task({
+          done: checked(node),
+          text: taskText(node),
+          fields,
+          unknownFields,
+          tags,
+          ...dateField("scheduled", fields.scheduled),
+          ...dateField("due", fields.due),
+          ...dateField("completed", fields.completed),
+          ...(fields.depends === undefined ? {} : { depends: fields.depends }),
+          ...(fields.repeat === undefined ? {} : { repeat: fields.repeat }),
+          ...(fields.area === undefined ? {} : { area: fields.area }),
+          ...(fields.project === undefined ? {} : { project: fields.project })
+        })
+      )
+    })
   }
 }
 
@@ -121,17 +125,20 @@ const taskTags = (task: MarkdownAst.ListItemNode): ReadonlyArray<string> => {
   return tags
 }
 
-const taskFields = (task: MarkdownAst.ListItemNode): Readonly<Record<string, string>> => {
-  const line = taskSourceLine(task)
-  const fields: Record<string, string> = {}
-  for (const field of MarkdownAst.inlineDataFields(task)) {
-    if (!sameSourceLine(line, field.position)) {
-      continue
+const taskFields = (
+  task: MarkdownAst.ListItemNode
+): Effect.Effect<Readonly<Record<string, string>>, MarkdownAst.MarkdownStringifyError, MarkdownAst.MarkdownProcessor> =>
+  Effect.gen(function* () {
+    const line = taskSourceLine(task)
+    const fields: Record<string, string> = {}
+    for (const field of MarkdownAst.inlineDataFields(task)) {
+      if (!sameSourceLine(line, field.position)) {
+        continue
+      }
+      fields[MarkdownAst.inlineDataFieldKeyText(field)] = yield* MarkdownAst.inlineDataFieldValueMarkdown(field)
     }
-    fields[MarkdownAst.inlineDataFieldKeyText(field)] = MarkdownAst.inlineDataFieldValueMarkdown(field)
-  }
-  return fields
-}
+    return fields
+  })
 
 const taskUnknownFields = (fields: Readonly<Record<string, string>>): Readonly<Record<string, string>> => {
   const unknownFields: Record<string, string> = {}

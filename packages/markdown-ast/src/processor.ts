@@ -8,7 +8,7 @@ import type { Processor } from "unified"
 import { unified } from "unified"
 import { Context, Effect, Layer, Schema } from "effect"
 
-import { Root } from "./schema.js"
+import { AnyNode, Root, type AnyNode as AnyMarkdownNode } from "./schema.js"
 import { markdownStringifyOptions } from "./stringify.js"
 
 type MarkdownUnifiedProcessor = Processor<MdastRoot, MdastRoot, MdastRoot, MdastRoot, string>
@@ -28,7 +28,7 @@ export class MarkdownStringifyError extends Schema.TaggedErrorClass<MarkdownStri
 
 export type MarkdownProcessorService = {
   readonly parse: (markdown: string) => Effect.Effect<typeof Root.Type, MarkdownParseError>
-  readonly stringify: (root: typeof Root.Type) => Effect.Effect<string, MarkdownStringifyError>
+  readonly stringify: (node: AnyMarkdownNode) => Effect.Effect<string, MarkdownStringifyError>
 }
 
 export class MarkdownProcessor extends Context.Service<MarkdownProcessor, MarkdownProcessorService>()(
@@ -69,8 +69,8 @@ function makeMarkdownProcessor(processor: MarkdownUnifiedProcessor): MarkdownPro
         )
       )
     ),
-    stringify: Effect.fn("MarkdownProcessor.stringify")((root: typeof Root.Type) =>
-      Schema.encodeEffect(Root)(root).pipe(
+    stringify: Effect.fn("MarkdownProcessor.stringify")((node: AnyMarkdownNode) =>
+      Schema.encodeEffect(AnyNode)(node).pipe(
         Effect.flatMap((encoded) =>
           Effect.try({
             try: () => processor.stringify(encoded as MdastRoot),

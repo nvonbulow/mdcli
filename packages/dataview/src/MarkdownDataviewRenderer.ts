@@ -1,7 +1,7 @@
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
-import type { MarkdownParseError, TaskParseError, VaultIoError } from "@kb/vault"
+import type { MarkdownParseError, MarkdownStringifyError, TaskParseError, VaultIoError } from "@kb/vault"
 import type { DataviewEvaluateError, DataviewParseError } from "./DataviewAst"
 import type { DataviewRenderError } from "./DataviewErrors"
 import { DataviewProgram } from "./DataviewProgram"
@@ -20,6 +20,7 @@ export type MarkdownDataviewRendererService = {
     | VaultIoError
     | TaskParseError
     | MarkdownParseError
+    | MarkdownStringifyError
   >
 }
 
@@ -56,7 +57,7 @@ const renderPart = (
   renderer: DataviewRenderer["Service"]
 ): Effect.Effect<
   string,
-  DataviewRenderError | DataviewParseError | DataviewEvaluateError | VaultIoError | TaskParseError | MarkdownParseError
+  DataviewRenderError | DataviewParseError | DataviewEvaluateError | VaultIoError | TaskParseError | MarkdownParseError | MarkdownStringifyError
 > => {
   switch (part._tag) {
     case "Markdown":

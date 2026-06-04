@@ -1,17 +1,18 @@
 import { assert, describe, it } from "@effect/vitest"
-import { Chunk, Effect, Option } from "effect"
+import { MarkdownProcessor } from "@kb/markdown-ast"
+import { Chunk, Effect, Layer, Option } from "effect"
 import { Markdown } from "../src/markdown/Markdown"
 import { MarkdownParser } from "../src/markdown/MarkdownParser"
 import { Task } from "../src/TaskModel"
 
+const parserLayer = Layer.mergeAll(MarkdownParser.layer, MarkdownProcessor.layer)
+
 const parseTasks = (markdown: string) =>
   Effect.gen(function* () {
     const file = yield* Markdown.parse(markdown)
-    return Chunk.toReadonlyArray(Markdown.tasks(file)).flatMap((node) => {
-      const task = Task.from(node)
-      return Option.isSome(task) ? [task.value] : []
-    })
-  }).pipe(Effect.provide(MarkdownParser.layer))
+    const results = yield* Effect.forEach(Chunk.toReadonlyArray(Markdown.tasks(file)), Task.from)
+    return results.flatMap((task) => (Option.isSome(task) ? [task.value] : []))
+  }).pipe(Effect.provide(parserLayer))
 
 
 describe("Task", () => {
@@ -83,13 +84,13 @@ describe("Task", () => {
           "- [ ] Real task #task [area:: [[Personal]]] [project:: [[Home Chores]]]"
         ].join("\n")
       )
-      const results = Chunk.toReadonlyArray(Markdown.tasks(file)).map(Task.from)
+      const results = yield* Effect.forEach(Chunk.toReadonlyArray(Markdown.tasks(file)), Task.from)
       const tasks = results.flatMap((task) => (Option.isSome(task) ? [task.value] : []))
 
       assert.strictEqual(results.length, 2)
       assert.strictEqual(tasks.length, 1)
       assert.strictEqual(tasks[0]?.text, "Real task")
-    }).pipe(Effect.provide(MarkdownParser.layer))
+    }).pipe(Effect.provide(parserLayer))
   )
 
   it.effect("extracts wikilink field values without stopping at nested brackets", () =>

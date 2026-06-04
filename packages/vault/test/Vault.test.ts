@@ -2,7 +2,7 @@ import { assert, describe, it } from "@effect/vitest"
 import { Chunk, Effect, FileSystem, Layer, Path, Result, Trie } from "effect"
 import { MarkdownFile } from "../src/markdown/MarkdownModel"
 import * as Glob from "../src/Glob"
-import { MarkdownParseError } from "@kb/markdown-ast"
+import { MarkdownParseError, MarkdownProcessor } from "@kb/markdown-ast"
 import { Vault } from "../src/Vault"
 import { VaultService } from "../src/VaultService"
 import { fromPath } from "../src/VaultScope"
@@ -262,7 +262,10 @@ describe("Vault", () => {
             ["Notes/Good.md", Result.succeed(goodFile) as Result.Result<MarkdownFile, MarkdownParseError>] as const
           ])
         }),
-      scoped: (scope) => Effect.flatMap(vaultService.readMarkdownTree(scope), (tree) => Vault.make({ scope, tree }))
+      scoped: (scope) =>
+        Effect.flatMap(vaultService.readMarkdownTree(scope), (tree) =>
+          Vault.make({ scope, tree }).pipe(Effect.provide(MarkdownProcessor.layer))
+        )
     })
 
     return Effect.gen(function* () {

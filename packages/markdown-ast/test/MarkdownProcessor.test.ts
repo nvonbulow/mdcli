@@ -52,6 +52,22 @@ describe("MarkdownProcessor", () => {
     assert.match(rendered, /\| Name  \| Count \|/)
   })
 
+  it("stringifies standalone markdown AST nodes through the shared processor", () => {
+    const processor = Markdown.MarkdownProcessor.make()
+    const richRoot = Effect.runSync(processor.parse("[[Target]] `code` *em* **strong** [link](https://example.com)"))
+    const paragraph = richRoot.children[0] as Markdown.ParagraphNode
+    const value: Markdown.InlineDataFieldValueNode = {
+      _tag: "InlineDataFieldValueNode",
+      type: "inlineDataFieldValue",
+      children: paragraph.children as ReadonlyArray<Markdown.InlineDataFieldContentNode>
+    }
+
+    assert.equal(
+      Effect.runSync(processor.stringify(value)),
+      "[[Target]] `code` *em* **strong** [link](https://example.com)\n"
+    )
+  })
+
   it("make uses the supplied processor instance", () => {
     const processor = Markdown.MarkdownProcessor.make(bareProcessor())
     const root = Effect.runSync(processor.parse("[[Target]]"))

@@ -3,6 +3,7 @@ import {
   fromPattern,
   isGlobPattern,
   type MarkdownParseError,
+  type MarkdownStringifyError,
   type ParsedTask,
   type TaskParseError,
   type VaultIoError,
@@ -21,7 +22,7 @@ export type DataviewRecordSourceService = {
     query: DataviewTaskQuery
   ) => Effect.Effect<
     ReadonlyArray<DataviewRecord>,
-    VaultIoError | TaskParseError | MarkdownParseError | DataviewEvaluateError
+    VaultIoError | TaskParseError | MarkdownParseError | MarkdownStringifyError | DataviewEvaluateError
   >
 }
 

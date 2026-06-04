@@ -7,7 +7,7 @@ import { MarkdownFile } from "../src/markdown/MarkdownModel"
 import { MarkdownParser } from "../src/markdown/MarkdownParser"
 import { VaultService } from "../src/VaultService"
 import { Vault } from "../src/Vault"
-import { MarkdownParseError } from "@kb/markdown-ast"
+import { MarkdownParseError, MarkdownProcessor } from "@kb/markdown-ast"
 import * as VaultScope from "../src/VaultScope"
 
 const testRoot = "/effect-check-test"
@@ -36,6 +36,7 @@ const vaultLayer = (state: TestVaultState) =>
     VaultService,
     Effect.gen(function* () {
       const parser = yield* MarkdownParser
+      const markdownProcessor = yield* MarkdownProcessor
 
       const readText = (path: string) => Effect.succeed(state.files[absolutePath(path)] ?? "")
       const parseMarkdown = (path: string, contents: string) =>
@@ -88,10 +89,13 @@ const vaultLayer = (state: TestVaultState) =>
         writeText: () => Effect.void,
         readMarkdown,
         readMarkdownTree,
-        scoped: (scope) => Effect.flatMap(readMarkdownTree(scope), (tree) => Vault.make({ scope, tree }))
+        scoped: (scope) =>
+          Effect.flatMap(readMarkdownTree(scope), (tree) =>
+            Vault.make({ scope, tree }).pipe(Effect.provideService(MarkdownProcessor, markdownProcessor))
+          )
       })
     })
-  ).pipe(Layer.provide(MarkdownParser.layer))
+  ).pipe(Layer.provide(Layer.mergeAll(MarkdownParser.layer, MarkdownProcessor.layer)))
 
 const checkLayer = (state: TestVaultState) => CheckService.layer.pipe(Layer.provide(vaultLayer(state)))
 

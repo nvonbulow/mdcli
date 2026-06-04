@@ -1,4 +1,4 @@
-import { Iterable, Option, Schema } from "effect"
+import { Effect, Iterable, Option, Schema } from "effect"
 
 import {
   HeadingLevel,
@@ -17,6 +17,7 @@ import {
   type WikilinkNode,
   type YamlFrontmatterNode
 } from "./schema.js"
+import { MarkdownProcessor, type MarkdownStringifyError } from "./processor.js"
 import { findAll } from "./visit.js"
 
 type TableOfContentsEntryShape = {
@@ -242,8 +243,14 @@ export const inlineDataFieldKeyText = (node: InlineDataFieldNode): string =>
 export const inlineDataFieldValueText = (node: InlineDataFieldNode): string =>
   childrenText(inlineDataFieldValue(node).children)
 
-export const inlineDataFieldValueMarkdown = (node: InlineDataFieldNode): string =>
-  inlineDataFieldValue(node).children.map(inlineDataFieldContentMarkdown).join("")
+export const inlineDataFieldValueMarkdown = (
+  node: InlineDataFieldNode
+): Effect.Effect<string, MarkdownStringifyError, MarkdownProcessor> =>
+  Effect.gen(function* () {
+    const processor = yield* MarkdownProcessor
+    const markdown = yield* processor.stringify(inlineDataFieldValue(node))
+    return trimTrailingDocumentNewline(markdown)
+  })
 
 
 const tagPattern = /#[A-Za-z0-9/_-]+\b/g
@@ -299,38 +306,8 @@ const advancePoint = (
   return { line, column, offset: point.offset + to - from }
 }
 
-const inlineDataFieldContentMarkdown = (node: PhrasingContentNode): string => {
-  switch (node._tag) {
-    case "BlockAnchorNode":
-    case "WikilinkNode": {
-      return node.original
-    }
-    case "BreakNode": {
-      return "\n"
-    }
-    case "InlineCodeNode": {
-      return `\`${node.value}\``
-    }
-    case "DeleteNode": {
-      return `~~${node.children.map(inlineDataFieldContentMarkdown).join("")}~~`
-    }
-    case "EmphasisNode": {
-      return `*${node.children.map(inlineDataFieldContentMarkdown).join("")}*`
-    }
-    case "StrongNode": {
-      return `**${node.children.map(inlineDataFieldContentMarkdown).join("")}**`
-    }
-    case "LinkNode": {
-      return `[${node.children.map(inlineDataFieldContentMarkdown).join("")}](${node.url})`
-    }
-    case "TextNode":
-    case "HtmlNode": {
-      return node.value
-    }
-    default: {
-      return nodeText(node)
-    }
-  }
-}
+const trimTrailingDocumentNewline = (markdown: string): string =>
+  markdown.endsWith("\n") ? markdown.slice(0, -1) : markdown
+
 export const inlineDataFieldsWithKey = (key: string) => (node: AnyNode): Iterable<InlineDataFieldNode> =>
   Iterable.filter(inlineDataFields(node), (field) => inlineDataFieldKeyText(field) === key)

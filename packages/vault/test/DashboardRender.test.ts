@@ -1,4 +1,5 @@
 import { assert, describe, it } from "@effect/vitest"
+import { MarkdownProcessor } from "@kb/markdown-ast"
 import { Chunk, Effect, FileSystem, Layer, Option, Path, Result, Trie } from "effect"
 import { Markdown } from "../src/markdown/Markdown"
 import type { MarkdownFile } from "../src/markdown/MarkdownModel"
@@ -126,12 +127,13 @@ describe("VaultService", () => {
 
       assert.strictEqual(first.path, "Inbox.md")
       assert.strictEqual(first.contents, "# Inbox\n- [ ] Old task #task")
+      const firstTasks = yield* parsedTaskValues(first)
       assert.deepStrictEqual(
-        parsedTaskValues(first).map((task) => task.text),
+        firstTasks.map((task) => task.text),
         ["Old task"]
       )
       assert.deepStrictEqual(
-        parsedTaskValues(first).map((task) => task.done),
+        firstTasks.map((task) => task.done),
         [false]
       )
 
@@ -140,12 +142,13 @@ describe("VaultService", () => {
 
       assert.strictEqual(second.path, "Inbox.md")
       assert.strictEqual(second.contents, "# Inbox\n- [x] New task #task")
+      const secondTasks = yield* parsedTaskValues(second)
       assert.deepStrictEqual(
-        parsedTaskValues(second).map((task) => task.text),
+        secondTasks.map((task) => task.text),
         ["New task"]
       )
       assert.deepStrictEqual(
-        parsedTaskValues(second).map((task) => task.done),
+        secondTasks.map((task) => task.done),
         [true]
       )
     }).pipe(Effect.provide(vaultLayer(files)))
@@ -153,7 +156,7 @@ describe("VaultService", () => {
 })
 
 const parsedTaskValues = (file: MarkdownFile) =>
-  Chunk.toReadonlyArray(Markdown.tasks(file)).flatMap((node) => {
-    const task = Task.from(node)
-    return Option.isSome(task) ? [task.value] : []
-  })
+  Effect.gen(function* () {
+    const results = yield* Effect.forEach(Chunk.toReadonlyArray(Markdown.tasks(file)), Task.from)
+    return results.flatMap((task) => (Option.isSome(task) ? [task.value] : []))
+  }).pipe(Effect.provide(MarkdownProcessor.layer))

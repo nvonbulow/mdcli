@@ -1,4 +1,4 @@
-import type { MarkdownParseError } from "@kb/markdown-ast"
+import { MarkdownProcessor, type MarkdownParseError, type MarkdownStringifyError } from "@kb/markdown-ast"
 import {
   Cache,
   Chunk,
@@ -53,7 +53,9 @@ export type VaultServiceShape = {
 
 export class VaultService extends Context.Service<VaultService, VaultServiceShape>()("@kb/vault/VaultService") {
   static makeLayer({ root }: { readonly root: string }) {
-    return Layer.effect(VaultService, makeVaultService(root)).pipe(Layer.provide(MarkdownParser.layer))
+    return Layer.effect(VaultService, makeVaultService(root)).pipe(
+      Layer.provide(Layer.mergeAll(MarkdownParser.layer, MarkdownProcessor.layer))
+    )
   }
 }
 
@@ -62,6 +64,7 @@ const makeVaultService = (root: string) =>
     const fs = yield* FileSystem.FileSystem
     const pathService = yield* Path.Path
     const parser = yield* MarkdownParser
+    const markdownProcessor = yield* MarkdownProcessor
     const glob = yield* Glob.Glob
 
     const readText = Effect.fn("VaultService.readText")(function* (path: string) {
@@ -162,7 +165,9 @@ const makeVaultService = (root: string) =>
       readMarkdownTree,
       listItemRecordsForFile
     )
-    const [taskFileCache, taskScopeCache] = yield* makeProjectionCache(readMarkdown, readMarkdownTree, taskRecordsForFile)
+    const [taskFileCache, taskScopeCache] = yield* makeProjectionCacheEffect(readMarkdown, readMarkdownTree, (path, file) =>
+      taskRecordsForFile(path, file).pipe(Effect.provideService(MarkdownProcessor, markdownProcessor))
+    )
     const [fencedBlockFileCache, fencedBlockScopeCache] = yield* makeProjectionCache(
       readMarkdown,
       readMarkdownTree,
@@ -217,7 +222,7 @@ const makeVaultService = (root: string) =>
           fencedBlockScopeCache,
           diagnosticScopeCache
         )
-      })
+      }).pipe(Effect.provideService(MarkdownProcessor, markdownProcessor))
     })
 
     return VaultService.of({
@@ -229,31 +234,42 @@ const makeVaultService = (root: string) =>
     })
   })
 
-type ProjectionFileCache<Record> = Cache.Cache<string, Chunk.Chunk<Record>, VaultIoError | MarkdownParseError>
-type ProjectionScopeCache<Record> = Cache.Cache<string, Chunk.Chunk<Record>, VaultIoError>
+type ProjectionFileCache<Record, Error = never> = Cache.Cache<
+  string,
+  Chunk.Chunk<Record>,
+  VaultIoError | MarkdownParseError | Error
+>
+type ProjectionScopeCache<Record, Error = never> = Cache.Cache<string, Chunk.Chunk<Record>, VaultIoError | Error>
 
 const makeProjectionCache = <Record>(
   readMarkdown: VaultServiceShape["readMarkdown"],
   readMarkdownTree: VaultServiceShape["readMarkdownTree"],
   project: (path: string, file: MarkdownFile) => Chunk.Chunk<Record>
 ): Effect.Effect<readonly [ProjectionFileCache<Record>, ProjectionScopeCache<Record>]> =>
+  makeProjectionCacheEffect(readMarkdown, readMarkdownTree, (path, file) => Effect.succeed(project(path, file)))
+
+const makeProjectionCacheEffect = <Record, Error>(
+  readMarkdown: VaultServiceShape["readMarkdown"],
+  readMarkdownTree: VaultServiceShape["readMarkdownTree"],
+  project: (path: string, file: MarkdownFile) => Effect.Effect<Chunk.Chunk<Record>, Error>
+): Effect.Effect<readonly [ProjectionFileCache<Record, Error>, ProjectionScopeCache<Record, Error>]> =>
   Effect.gen(function* () {
-    const fileCache = yield* Cache.makeWith<string, Chunk.Chunk<Record>, VaultIoError | MarkdownParseError>(
-      (path) => Effect.map(readMarkdown(path), (file) => project(path, file)),
+    const fileCache = yield* Cache.makeWith<string, Chunk.Chunk<Record>, VaultIoError | MarkdownParseError | Error>(
+      (path) => Effect.flatMap(readMarkdown(path), (file) => project(path, file)),
       { capacity: Number.MAX_SAFE_INTEGER }
     )
-    const scopeCache = yield* Cache.makeWith<string, Chunk.Chunk<Record>, VaultIoError>(
+    const scopeCache = yield* Cache.makeWith<string, Chunk.Chunk<Record>, VaultIoError | Error>(
       (key) => recordsForScope(readMarkdownTree, fileCache, scopeFromKey(key)),
       { capacity: Number.MAX_SAFE_INTEGER }
     )
     return [fileCache, scopeCache] as const
   })
 
-const recordsForScope = <Record>(
+const recordsForScope = <Record, Error>(
   readMarkdownTree: VaultServiceShape["readMarkdownTree"],
-  fileCache: ProjectionFileCache<Record>,
+  fileCache: ProjectionFileCache<Record, Error>,
   scope: VaultScope
-): Effect.Effect<Chunk.Chunk<Record>, VaultIoError> =>
+): Effect.Effect<Chunk.Chunk<Record>, VaultIoError | Error> =>
   Effect.gen(function* () {
     const tree = yield* readMarkdownTree(scope)
     let records = Chunk.empty<Record>()
@@ -261,7 +277,7 @@ const recordsForScope = <Record>(
       if (pathMatchesScope(path, scope) && Result.isSuccess(result)) {
         const projected = yield* Cache.get(fileCache, path).pipe(
           Effect.catchIf(
-            (error): error is MarkdownParseError => error._tag === "MarkdownParseError",
+            isMarkdownParseError,
             () => Effect.succeed(Chunk.empty<Record>())
           )
         )
@@ -293,7 +309,7 @@ const projectionsForScope = (
   linkScopeCache: ProjectionScopeCache<VaultLinkRecord>,
   tagScopeCache: ProjectionScopeCache<VaultTagRecord>,
   listItemScopeCache: ProjectionScopeCache<VaultListItemRecord>,
-  taskScopeCache: ProjectionScopeCache<VaultTaskRecord>,
+  taskScopeCache: ProjectionScopeCache<VaultTaskRecord, MarkdownStringifyError>,
   fencedBlockScopeCache: ProjectionScopeCache<VaultFencedBlockRecord>,
   diagnosticScopeCache: ProjectionScopeCache<VaultDiagnostic>
 ): VaultProjectionMethods => ({
@@ -307,6 +323,12 @@ const projectionsForScope = (
   fencedBlocks: (narrowScope?: VaultScope) => Cache.get(fencedBlockScopeCache, scopeKey(narrowScope ?? scope)),
   diagnostics: (narrowScope?: VaultScope) => Cache.get(diagnosticScopeCache, scopeKey(narrowScope ?? scope))
 })
+
+const isMarkdownParseError = (error: unknown): error is MarkdownParseError =>
+  typeof error === "object" &&
+  error !== null &&
+  "_tag" in error &&
+  (error as { readonly _tag?: unknown })._tag === "MarkdownParseError"
 
 const pathMatchesScope = (path: string, scope: VaultScope): boolean => {
   for (const pattern of scope.patterns) {

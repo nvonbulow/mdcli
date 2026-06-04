@@ -1,3 +1,4 @@
+import type { MarkdownStringifyError } from "@kb/markdown-ast"
 import { Chunk, Context, Effect, Layer, String as Str } from "effect"
 import type * as Glob from "./Glob"
 import {
@@ -17,7 +18,7 @@ import { VaultService } from "./VaultService"
 import type { VaultIoError } from "./VaultErrors"
 import type { VaultScope } from "./VaultScope"
 
-export type CheckServiceError = VaultIoError | Glob.GlobError
+export type CheckServiceError = VaultIoError | Glob.GlobError | MarkdownStringifyError
 const serviceRegistry = new WeakMap<
   CheckServiceShape,
   { readonly scopedVaultForScope: ScopedVaultForScope; readonly analyzers: ReadonlyArray<CheckAnalyzer> }

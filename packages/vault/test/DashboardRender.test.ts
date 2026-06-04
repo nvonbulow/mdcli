@@ -1,8 +1,10 @@
 import { assert, describe, it } from "@effect/vitest"
-import { Chunk, Effect, FileSystem, Layer, Path, Result, Trie } from "effect"
+import { Chunk, Effect, FileSystem, Layer, Option, Path, Result, Trie } from "effect"
 import { Markdown } from "../src/markdown/Markdown"
+import type { MarkdownFile } from "../src/markdown/MarkdownModel"
 import * as Glob from "../src/Glob"
 import { VaultService } from "../src/VaultService"
+import { Task } from "../src/TaskModel"
 import { fromPath } from "../src/VaultScope"
 
 const testRoot = "/effect-vault-test"
@@ -125,11 +127,11 @@ describe("VaultService", () => {
       assert.strictEqual(first.path, "Inbox.md")
       assert.strictEqual(first.contents, "# Inbox\n- [ ] Old task #task")
       assert.deepStrictEqual(
-        Chunk.toReadonlyArray(Markdown.tasks(first)).map((task) => task.data?.obsidianTask?.text),
-        ["Old task #task"]
+        parsedTaskValues(first).map((task) => task.text),
+        ["Old task"]
       )
       assert.deepStrictEqual(
-        Chunk.toReadonlyArray(Markdown.tasks(first)).map((task) => task.data?.obsidianTask?.done),
+        parsedTaskValues(first).map((task) => task.done),
         [false]
       )
 
@@ -139,13 +141,19 @@ describe("VaultService", () => {
       assert.strictEqual(second.path, "Inbox.md")
       assert.strictEqual(second.contents, "# Inbox\n- [x] New task #task")
       assert.deepStrictEqual(
-        Chunk.toReadonlyArray(Markdown.tasks(second)).map((task) => task.data?.obsidianTask?.text),
-        ["New task #task"]
+        parsedTaskValues(second).map((task) => task.text),
+        ["New task"]
       )
       assert.deepStrictEqual(
-        Chunk.toReadonlyArray(Markdown.tasks(second)).map((task) => task.data?.obsidianTask?.done),
+        parsedTaskValues(second).map((task) => task.done),
         [true]
       )
     }).pipe(Effect.provide(vaultLayer(files)))
   })
 })
+
+const parsedTaskValues = (file: MarkdownFile) =>
+  Chunk.toReadonlyArray(Markdown.tasks(file)).flatMap((node) => {
+    const task = Task.from(node)
+    return Option.isSome(task) ? [task.value] : []
+  })

@@ -52,7 +52,7 @@ describe("Markdown wikilinks", () => {
     assert.equal(stringify(root), `${source}\n`)
   })
 
-  it("uses vault markdown list markers and preserves Obsidian inline field brackets", () => {
+  it("uses vault markdown list markers and preserves inline field brackets", () => {
     const source = "- [x] Task [scheduled:: 2026-05-23] [depends:: [[Target#^block-id]]]\n  - Child [area:: [[Personal]]]"
     const root = decode(source)
 

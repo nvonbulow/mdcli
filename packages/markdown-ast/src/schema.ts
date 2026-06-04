@@ -26,6 +26,7 @@ const PositionField = Schema.Struct({
   end: Position
 })
 type PositionField = typeof PositionField.Type
+export type SourcePosition = PositionField
 
 type NodeFields<Type extends string, Tag extends string> = {
   readonly _tag: Tag

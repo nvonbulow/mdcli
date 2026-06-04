@@ -1,3 +1,4 @@
+import type { MarkdownParseError } from "@kb/markdown-ast"
 import {
   Cache,
   Chunk,
@@ -17,7 +18,7 @@ import { Minimatch } from "minimatch"
 import * as Glob from "./Glob"
 import { MarkdownFile, type MarkdownTree } from "./markdown/MarkdownModel"
 import { MarkdownParser } from "./markdown/MarkdownParser"
-import { MarkdownParseError, VaultIoError } from "./VaultErrors"
+import { VaultIoError } from "./VaultErrors"
 import { VaultScope } from "./VaultScope"
 import {
   fencedBlockRecordsForFile,

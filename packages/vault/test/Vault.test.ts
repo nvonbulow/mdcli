@@ -2,7 +2,7 @@ import { assert, describe, it } from "@effect/vitest"
 import { Chunk, Effect, FileSystem, Layer, Path, Result, Trie } from "effect"
 import { MarkdownFile } from "../src/markdown/MarkdownModel"
 import * as Glob from "../src/Glob"
-import { MarkdownParseError } from "../src/VaultErrors"
+import { MarkdownParseError } from "@kb/markdown-ast"
 import { Vault } from "../src/Vault"
 import { VaultService } from "../src/VaultService"
 import { fromPath } from "../src/VaultScope"
@@ -132,11 +132,6 @@ describe("Vault", () => {
         [
           ["Notes/Search.md", "Work"],
           ["Notes/Search.md", "Runbook"],
-          ["Notes/Search.md", "Finance"],
-          ["Notes/Search.md", "Work"],
-          ["Notes/Search.md", "Runbook"],
-          ["Notes/Search.md", "Finance"],
-          ["Notes/Search.md", "Runbook"],
           ["Notes/Search.md", "Finance"]
         ]
       )
@@ -144,11 +139,7 @@ describe("Vault", () => {
         tags.map((tag) => [tag.path, tag.value]),
         [
           ["Notes/Runbook.md", "#ops"],
-          ["Notes/Runbook.md", "#ops"],
           ["Notes/Search.md", "#meeting"],
-          ["Notes/Search.md", "#meeting"],
-          ["Notes/Search.md", "#task"],
-          ["Notes/Search.md", "#task"],
           ["Notes/Search.md", "#task"]
         ]
       )
@@ -162,11 +153,7 @@ describe("Vault", () => {
       )
       assert.deepStrictEqual(
         finance.map((result) => [result._tag, result.path, result.text]),
-        [
-          ["Link", "Notes/Search.md", "Finance"],
-          ["Link", "Notes/Search.md", "Finance"],
-          ["Link", "Notes/Search.md", "Finance"]
-        ]
+        [["Link", "Notes/Search.md", "Finance"]]
       )
       assert.strictEqual(state.writes, 0)
     }).pipe(Effect.provide(vaultLayer(state)))
@@ -209,7 +196,6 @@ describe("Vault", () => {
         [
           ["Note", "Notes/Kept.md", "Kept"],
           ["Heading", "Notes/Kept.md", "Kept Note #kept"],
-          ["Tag", "Notes/Kept.md", "#kept"],
           ["Tag", "Notes/Kept.md", "#kept"]
         ]
       )
@@ -251,8 +237,16 @@ describe("Vault", () => {
       path: "Notes/Good.md",
       contents: "# Good Note",
       mdast: {
+        _tag: "Root",
         type: "root",
-        children: [{ type: "heading", depth: 1, children: [{ type: "text", value: "Good Note" }] }]
+        children: [
+          {
+            _tag: "HeadingNode",
+            type: "heading",
+            depth: 1,
+            children: [{ _tag: "TextNode", type: "text", value: "Good Note" }]
+          }
+        ]
       }
     })
     const parseFailure = new MarkdownParseError({ message: "bad markdown", input: "!!!" })

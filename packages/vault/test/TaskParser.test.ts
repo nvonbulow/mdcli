@@ -1,4 +1,3 @@
-import { scanInlineFields, stripInlineFields } from "@kb/remark-obsidian"
 import { assert, describe, it } from "@effect/vitest"
 import { Chunk, Effect, Option } from "effect"
 import { Markdown } from "../src/markdown/Markdown"
@@ -14,8 +13,6 @@ const parseTasks = (markdown: string) =>
     })
   }).pipe(Effect.provide(MarkdownParser.layer))
 
-const inlineFieldRecord = (lineText: string): Readonly<Record<string, string>> =>
-  Object.fromEntries(scanInlineFields(lineText).map((field) => [field.key, field.value]))
 
 describe("Task", () => {
   it.effect("parses #task checkboxes without source path wrapping", () =>
@@ -40,24 +37,23 @@ describe("Task", () => {
     })
   )
 
-  it("extracts known and unknown fields through the inline field scanner", () => {
-    const fields = inlineFieldRecord(
-      "Grocery shopping #task [scheduled:: 2026-05-23] [due:: 2026-05-24] [completed:: 2026-05-25] [depends:: [[Meal Planning#^meal-planning-20260523]]] [repeat:: every week] [area:: [[Personal]]] [project:: [[Meal Planning]]] [energy:: low]"
-    )
+  it.effect("extracts known and unknown fields through markdown ast helpers", () =>
+    Effect.gen(function* () {
+      const tasks = yield* parseTasks(
+        "- [ ] Grocery shopping #task [scheduled:: 2026-05-23] [due:: 2026-05-24] [completed:: 2026-05-25] [depends:: [[Meal Planning#^meal-planning-20260523]]] [repeat:: every week] [area:: [[Personal]]] [project:: [[Meal Planning]]] [energy:: low]"
+      )
 
-    assert.strictEqual(fields.scheduled, "2026-05-23")
-    assert.strictEqual(fields.due, "2026-05-24")
-    assert.strictEqual(fields.completed, "2026-05-25")
-    assert.strictEqual(fields.depends, "[[Meal Planning#^meal-planning-20260523]]")
-    assert.strictEqual(fields.repeat, "every week")
-    assert.strictEqual(fields.area, "[[Personal]]")
-    assert.strictEqual(fields.project, "[[Meal Planning]]")
-    assert.strictEqual(fields.energy, "low")
-    assert.strictEqual(
-      stripInlineFields("Grocery shopping #task [area:: [[Personal]]] (priority:: high)"),
-      "Grocery shopping #task"
-    )
-  })
+      assert.strictEqual(tasks[0]?.fields.scheduled, "2026-05-23")
+      assert.strictEqual(tasks[0]?.fields.due, "2026-05-24")
+      assert.strictEqual(tasks[0]?.fields.completed, "2026-05-25")
+      assert.strictEqual(tasks[0]?.fields.depends, "[[Meal Planning#^meal-planning-20260523]]")
+      assert.strictEqual(tasks[0]?.fields.repeat, "every week")
+      assert.strictEqual(tasks[0]?.fields.area, "[[Personal]]")
+      assert.strictEqual(tasks[0]?.fields.project, "[[Meal Planning]]")
+      assert.strictEqual(tasks[0]?.fields.energy, "low")
+      assert.strictEqual(tasks[0]?.text, "Grocery shopping")
+    })
+  )
 
   it.effect("preserves known and unknown fields on pathless tasks", () =>
     Effect.gen(function* () {
@@ -96,12 +92,14 @@ describe("Task", () => {
     }).pipe(Effect.provide(MarkdownParser.layer))
   )
 
-  it("extracts wikilink field values without stopping at nested brackets", () => {
-    const fields = inlineFieldRecord("#task [depends:: [[Meal Planning#^anchor]]] [area:: [[Personal]]]")
+  it.effect("extracts wikilink field values without stopping at nested brackets", () =>
+    Effect.gen(function* () {
+      const tasks = yield* parseTasks("- [ ] Nested #task [depends:: [[Meal Planning#^anchor]]] [area:: [[Personal]]]")
 
-    assert.strictEqual(fields.depends, "[[Meal Planning#^anchor]]")
-    assert.strictEqual(fields.area, "[[Personal]]")
-  })
+      assert.strictEqual(tasks[0]?.depends, "[[Meal Planning#^anchor]]")
+      assert.strictEqual(tasks[0]?.area, "[[Personal]]")
+    })
+  )
 
   it.effect("derives nested AST task text without including child task fields", () =>
     Effect.gen(function* () {

@@ -1,10 +1,17 @@
-import type { ObsidianListItem, ObsidianTag, ObsidianWikilink } from "@kb/remark-obsidian"
-import type { Code, Heading, ListItem, Yaml } from "mdast"
+import type {
+  CodeNode,
+  HeadingNode,
+  ListItemNode,
+  MarkdownTagNode,
+  WikilinkNode,
+  YamlFrontmatterNode
+} from "@kb/markdown-ast"
 import { Chunk, Context, Effect, Option, Result, String as Str, Trie } from "effect"
 import { Markdown } from "./markdown/Markdown"
 import { MarkdownFile, type MarkdownTree, type SourcePosition } from "./markdown/MarkdownModel"
 import { ParsedTask, Task, TaskSource } from "./TaskModel"
-import type { MarkdownParseError, VaultIoError } from "./VaultErrors"
+import type { VaultIoError } from "./VaultErrors"
+import type { MarkdownParseError } from "@kb/markdown-ast"
 import { allMarkdown, VaultScope } from "./VaultScope"
 
 export type VaultRecord<Node> = {
@@ -19,17 +26,17 @@ export type VaultNoteRecord = {
   readonly file: MarkdownFile
 }
 
-export type VaultFrontmatterRecord = VaultRecord<Yaml> & {
+export type VaultFrontmatterRecord = VaultRecord<YamlFrontmatterNode> & {
   readonly value: string
   readonly language?: string
 }
 
-export type VaultHeadingRecord = VaultRecord<Heading> & {
+export type VaultHeadingRecord = VaultRecord<HeadingNode> & {
   readonly depth: number
   readonly text: string
 }
 
-export type VaultLinkRecord = VaultRecord<ObsidianWikilink> & {
+export type VaultLinkRecord = VaultRecord<WikilinkNode> & {
   readonly target: string
   readonly value: string
   readonly original: string
@@ -38,16 +45,16 @@ export type VaultLinkRecord = VaultRecord<ObsidianWikilink> & {
   readonly block?: string
 }
 
-export type VaultTagRecord = VaultRecord<ObsidianTag> & {
+export type VaultTagRecord = VaultRecord<MarkdownTagNode> & {
   readonly value: string
 }
 
-export type VaultListItemRecord = VaultRecord<ListItem> & {
+export type VaultListItemRecord = VaultRecord<ListItemNode> & {
   readonly text: string
   readonly checked?: boolean
 }
 
-export type VaultTaskRecord = VaultRecord<ObsidianListItem> & {
+export type VaultTaskRecord = VaultRecord<ListItemNode> & {
   readonly task: ParsedTask
   readonly done: boolean
   readonly text: string
@@ -56,7 +63,7 @@ export type VaultTaskRecord = VaultRecord<ObsidianListItem> & {
   readonly tags: Chunk.Chunk<string>
 }
 
-export type VaultFencedBlockRecord = VaultRecord<Code> & {
+export type VaultFencedBlockRecord = VaultRecord<CodeNode> & {
   readonly value: string
   readonly language?: string
   readonly meta?: string
@@ -204,7 +211,7 @@ export const frontmatterRecordsForFile = (path: string, file: MarkdownFile): Chu
     path,
     file,
     node,
-    value: node.value,
+    value: frontmatterValue(file, node),
     language: "yaml",
     ...optionalPosition(Markdown.position(node))
   }))
@@ -227,9 +234,9 @@ export const linkRecordsForFile = (path: string, file: MarkdownFile): Chunk.Chun
     target: node.target,
     value: node.value,
     original: node.original,
-    ...optionalString("alias", node.alias),
-    ...optionalString("heading", node.heading),
-    ...optionalString("block", node.block),
+    ...optionalString("alias", optionString(node.alias)),
+    ...optionalString("heading", optionString(node.header)),
+    ...optionalString("block", optionString(node.block)),
     ...optionalPosition(Markdown.position(node))
   }))
 
@@ -248,7 +255,7 @@ export const listItemRecordsForFile = (path: string, file: MarkdownFile): Chunk.
     file,
     node,
     text: Markdown.listItemText(node),
-    ...optionalChecked(node.checked),
+    ...optionalChecked(optionValue(node.checked)),
     ...optionalPosition(Markdown.position(node))
   }))
 
@@ -285,7 +292,7 @@ export const fencedBlockRecordsForFile = (path: string, file: MarkdownFile): Chu
     ...optionalPosition(Markdown.position(node))
   }))
 
-const parsedTaskFromNode = (path: string, node: ObsidianListItem): Option.Option<ParsedTask> =>
+const parsedTaskFromNode = (path: string, node: ListItemNode): Option.Option<ParsedTask> =>
   Option.map(Task.from(node), (task) => {
     const position = Markdown.position(node)
     return new ParsedTask({
@@ -412,6 +419,20 @@ const matches = (needle: string, ...values: ReadonlyArray<string | undefined>): 
   }
   return false
 }
+
+const frontmatterValue = (file: MarkdownFile, node: YamlFrontmatterNode): string => {
+  const position = Markdown.position(node)
+  if (position === undefined) {
+    return typeof node.value === "string" ? node.value : ""
+  }
+  const lines = file.contents.split("\n")
+  return lines.slice(position.start.line, Math.max(position.start.line, position.end.line - 1)).join("\n")
+}
+
+const optionValue = <Value>(option: Option.Option<Value>): Value | undefined =>
+  Option.isSome(option) ? option.value : undefined
+
+const optionString = (option: Option.Option<string>): string | undefined => optionValue(option)
 
 const optionalPosition = <P>(position: P | undefined): { readonly position?: P } => {
   if (position === undefined) {

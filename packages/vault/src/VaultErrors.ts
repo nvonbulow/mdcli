@@ -1,4 +1,5 @@
 import { Schema } from "effect"
+import type { MarkdownParseError } from "@kb/markdown-ast"
 import { DashboardName } from "./DashboardModel"
 import { TaskSource } from "./TaskModel"
 
@@ -17,13 +18,7 @@ export class TaskParseError extends Schema.TaggedErrorClass<TaskParseError>("@kb
   }
 ) {}
 
-export class MarkdownParseError extends Schema.TaggedErrorClass<MarkdownParseError>("@kb/vault/MarkdownParseError")(
-  "MarkdownParseError",
-  {
-    message: Schema.String,
-    input: Schema.optionalKey(Schema.String)
-  }
-) {}
+export { MarkdownParseError } from "@kb/markdown-ast"
 
 export class DashboardRenderError extends Schema.TaggedErrorClass<DashboardRenderError>(
   "@kb/vault/DashboardRenderError"

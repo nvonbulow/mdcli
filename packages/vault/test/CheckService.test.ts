@@ -7,7 +7,7 @@ import { MarkdownFile } from "../src/markdown/MarkdownModel"
 import { MarkdownParser } from "../src/markdown/MarkdownParser"
 import { VaultService } from "../src/VaultService"
 import { Vault } from "../src/Vault"
-import { MarkdownParseError } from "../src/VaultErrors"
+import { MarkdownParseError } from "@kb/markdown-ast"
 import * as VaultScope from "../src/VaultScope"
 
 const testRoot = "/effect-check-test"

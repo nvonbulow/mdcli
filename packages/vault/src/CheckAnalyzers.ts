@@ -540,8 +540,8 @@ const firstStrandedDumpLine = (contents: string): number | undefined => {
 }
 
 const positionForLine = (lineNumber: number) => ({
-  start: { line: lineNumber, column: 1 },
-  end: { line: lineNumber, column: 1 }
+  start: { line: lineNumber, column: 1, offset: 0 },
+  end: { line: lineNumber, column: 1, offset: 0 }
 })
 
 const unquote = (value: string): string =>

@@ -1,15 +1,15 @@
-import type { ObsidianTag } from "@kb/remark-obsidian"
+import type { Root, SourcePosition } from "@kb/markdown-ast"
+import type { MarkdownParseError } from "@kb/markdown-ast"
 import { Data, Trie } from "effect"
 import type { Result } from "effect"
-import type { MarkdownParseError } from "../VaultErrors"
 
-export type SourcePosition = NonNullable<ObsidianTag["position"]>
+export type { SourcePosition }
 export type SourcePoint = SourcePosition["start"]
 
 export class MarkdownFile extends Data.Class<{
   readonly path?: string
   readonly contents: string
-  readonly mdast: unknown
+  readonly mdast: Root
 }> {}
 
 export type MarkdownTree = {

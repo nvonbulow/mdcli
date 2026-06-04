@@ -8,7 +8,7 @@ import {
   type IsoDate,
   type VaultScope
 } from "@kb/vault"
-import { Chunk, Effect, Layer, Trie } from "effect"
+import { Chunk, Effect, Layer, Option, Trie } from "effect"
 import {
   DataviewEvaluator,
   DataviewExpression,
@@ -43,11 +43,13 @@ const parserEvaluatorLayer = Layer.mergeAll(DataviewParser.layerNoDeps, Dataview
 
 const vaultTaskRecord = (task: ParsedTask) => ({
   path: task.source.path,
-  file: new MarkdownModel.MarkdownFile({ path: task.source.path, contents: "", mdast: { type: "root", children: [] } }),
+  file: new MarkdownModel.MarkdownFile({ path: task.source.path, contents: "", mdast: { _tag: "Root", type: "root", children: [] } }),
   node: {
+    _tag: "ListItemNode",
     type: "listItem",
     children: [],
-    data: { obsidianTask: { done: task.done, text: task.text, rawText: task.text, tags: [], inlineFields: [] } }
+    checked: task.done ? Option.some(true) : Option.some(false),
+    spread: Option.none()
   } as never,
   task,
   done: task.done,

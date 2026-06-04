@@ -1,10 +1,5 @@
-import {
-  stripInlineFields,
-  type ObsidianInlineField,
-  type ObsidianListItem
-} from "@kb/remark-obsidian"
+import * as MarkdownAst from "@kb/markdown-ast"
 import { Option, Schema, String as Str } from "effect"
-
 
 export const IsoDate = Schema.TemplateLiteral([Schema.Number, "-", Schema.Number, "-", Schema.Number])
 export type IsoDate = typeof IsoDate.Type
@@ -40,18 +35,18 @@ export class Task extends Schema.Class<Task>("@kb/vault/Task")({
   area: Schema.optionalKey(Schema.String),
   project: Schema.optionalKey(Schema.String)
 }) {
-  static from(node: ObsidianListItem): Option.Option<Task> {
+  static from(node: MarkdownAst.ListItemNode): Option.Option<Task> {
     const tags = taskTags(node)
     if (!tags.includes(taskTag)) {
       return Option.none()
     }
 
-    const fields = taskFields(node.data?.obsidianTask?.inlineFields ?? [], taskSourceLine(node))
+    const fields = taskFields(node)
     const unknownFields = taskUnknownFields(fields)
 
     return Option.some(
       new Task({
-        done: node.data?.obsidianTask?.done ?? node.checked === true,
+        done: checked(node),
         text: taskText(node),
         fields,
         unknownFields,
@@ -95,30 +90,27 @@ export class WeekWindow extends Schema.Class<WeekWindow>("@kb/vault/WeekWindow")
 const taskTag = "#task"
 const taskTextTagPattern = /#[A-Za-z0-9/_-]+\b/g
 const taskTextCheckboxPattern = /^\s*[-*+]\s+\[[ xX]\]\s*/
+const knownFields: Record<string, true> = {
+  scheduled: true,
+  due: true,
+  completed: true,
+  depends: true,
+  repeat: true,
+  area: true,
+  project: true
+}
 const whitespacePattern = /\s{2,}/g
-const knownFields = new Set(["scheduled", "due", "completed", "depends", "repeat", "area", "project"])
 
 type PositionLike = {
   readonly start: {
     readonly line?: number | undefined
-    readonly offset?: number | undefined
-  }
-  readonly end: {
-    readonly line?: number | undefined
-    readonly offset?: number | undefined
   }
 }
-type MarkdownNode = {
-  readonly type: string
-  readonly children?: ReadonlyArray<MarkdownNode>
-  readonly value?: unknown
-}
 
-
-const taskTags = (task: ObsidianListItem): ReadonlyArray<string> => {
+const taskTags = (task: MarkdownAst.ListItemNode): ReadonlyArray<string> => {
   const line = taskSourceLine(task)
   const tags: Array<string> = []
-  for (const tag of task.data?.obsidianTask?.tags ?? []) {
+  for (const tag of MarkdownAst.tags(task)) {
     if (!sameSourceLine(line, tag.position)) {
       continue
     }
@@ -129,16 +121,14 @@ const taskTags = (task: ObsidianListItem): ReadonlyArray<string> => {
   return tags
 }
 
-const taskFields = (
-  inlineFields: Iterable<ObsidianInlineField>,
-  line: number | undefined
-): Readonly<Record<string, string>> => {
+const taskFields = (task: MarkdownAst.ListItemNode): Readonly<Record<string, string>> => {
+  const line = taskSourceLine(task)
   const fields: Record<string, string> = {}
-  for (const field of inlineFields) {
+  for (const field of MarkdownAst.inlineDataFields(task)) {
     if (!sameSourceLine(line, field.position)) {
       continue
     }
-    fields[field.key] = field.value
+    fields[MarkdownAst.inlineDataFieldKeyText(field)] = MarkdownAst.inlineDataFieldValueMarkdown(field)
   }
   return fields
 }
@@ -146,90 +136,71 @@ const taskFields = (
 const taskUnknownFields = (fields: Readonly<Record<string, string>>): Readonly<Record<string, string>> => {
   const unknownFields: Record<string, string> = {}
   for (const [key, value] of Object.entries(fields)) {
-    if (!knownFields.has(key)) {
+    if (knownFields[key] !== true) {
       unknownFields[key] = value
     }
   }
   return unknownFields
 }
 
-const taskText = (task: ObsidianListItem): string => {
-  const syntaxText = listItemFirstParagraphText(task)
-  const fallbackText = task.data?.obsidianTask?.rawText ?? listItemTextWithoutNestedLists(task) ?? task.data?.obsidianTask?.text ?? ""
-  const text = firstLine(syntaxText ?? fallbackText).replace(taskTextCheckboxPattern, "")
-  return Str.trim(stripInlineFields(text).replace(taskTextTagPattern, "").replace(whitespacePattern, " "))
+const taskText = (task: MarkdownAst.ListItemNode): string => {
+  const text = firstLine(listItemFirstParagraphText(task) ?? listItemTextWithoutNestedLists(task) ?? "").replace(
+    taskTextCheckboxPattern,
+    ""
+  )
+  return Str.trim(text.replace(taskTextTagPattern, "").replace(whitespacePattern, " "))
 }
 
-const listItemFirstParagraphText = (node: unknown): string | undefined => {
-  const children = (node as MarkdownNode).children
-  if (children === undefined) {
-    return undefined
-  }
-  for (const child of children) {
-    if (child.type === "paragraph") {
+const listItemFirstParagraphText = (node: MarkdownAst.ListItemNode): string | undefined => {
+  for (const child of node.children) {
+    if (child._tag === "ParagraphNode") {
       return nodeTextWithoutInlineFields(child)
     }
   }
   return undefined
 }
 
-const listItemTextWithoutNestedLists = (node: unknown): string | undefined => {
-  const children = (node as MarkdownNode).children
-  return children === undefined ? undefined : nodeTextWithoutNestedLists(node)
-}
+const listItemTextWithoutNestedLists = (node: MarkdownAst.ListItemNode): string | undefined => nodeTextWithoutNestedLists(node)
 
 const firstLine = (text: string): string => {
   const newline = text.indexOf("\n")
   return newline === -1 ? text : text.slice(0, newline)
 }
 
-const nodeTextWithoutInlineFields = (node: unknown): string => {
-  const markdownNode = node as MarkdownNode
-  if (markdownNode.type === "obsidianInlineField") {
+const nodeTextWithoutInlineFields = (node: MarkdownAst.AnyNode): string => {
+  if (node._tag === "InlineDataFieldNode" || node._tag === "BlockAnchorNode") {
     return ""
   }
-  const literal = markdownNode.value
-  if (typeof literal === "string") {
-    return literal
-  }
-  const children = markdownNode.children
-  if (children === undefined) {
-    return ""
+  if (!("children" in node)) {
+    return MarkdownAst.nodeText(node)
   }
   let text = ""
-  for (const child of children) {
+  for (const child of node.children as ReadonlyArray<MarkdownAst.AnyNode>) {
     text = text + nodeTextWithoutInlineFields(child)
   }
   return text
 }
 
-const nodeTextWithoutNestedLists = (node: unknown): string => {
-  const markdownNode = node as MarkdownNode
-  if (markdownNode.type === "obsidianInlineField") {
+const nodeTextWithoutNestedLists = (node: MarkdownAst.AnyNode): string => {
+  if (node._tag === "InlineDataFieldNode" || node._tag === "BlockAnchorNode" || node._tag === "ListNode") {
     return ""
   }
-  const literal = markdownNode.value
-  if (typeof literal === "string") {
-    return literal
-  }
-  const children = markdownNode.children
-  if (children === undefined) {
-    return ""
+  if (!("children" in node)) {
+    return MarkdownAst.nodeText(node)
   }
   let text = ""
-  for (const child of children) {
-    if (child.type !== "list") {
-      text = text + nodeTextWithoutNestedLists(child)
-    }
+  for (const child of node.children as ReadonlyArray<MarkdownAst.AnyNode>) {
+    text = text + nodeTextWithoutNestedLists(child)
   }
   return text
 }
 
-const taskSourceLine = (task: ObsidianListItem): number | undefined =>
-  task.position?.start.line ?? task.data?.obsidianTask?.position?.start.line
+const taskSourceLine = (task: MarkdownAst.ListItemNode): number | undefined => task.position?.start.line
 
 const sameSourceLine = (line: number | undefined, position: PositionLike | undefined): boolean =>
   line === undefined || position?.start.line === line
+
+const checked = (task: MarkdownAst.ListItemNode): boolean => (Option.isSome(task.checked) ? task.checked.value : false)
 
 const isIsoDate = (value: string): value is IsoDate => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {

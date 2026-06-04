@@ -1,4 +1,4 @@
-import { remarkWikilinks } from "@kb/remark-wikilinks"
+import { remarkPlugin } from "@kb/remark-plugin"
 import type { Root as MdastRoot } from "mdast"
 import remarkFrontmatter from "remark-frontmatter"
 import remarkGfm from "remark-gfm"
@@ -50,7 +50,7 @@ function defaultProcessor(): MarkdownUnifiedProcessor {
     .use(remarkParse)
     .use(remarkFrontmatter, ["yaml"])
     .use(remarkGfm)
-    .use(remarkWikilinks)
+    .use(remarkPlugin)
     .use(remarkStringify, markdownStringifyOptions)
 }
 

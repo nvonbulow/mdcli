@@ -134,6 +134,21 @@ export interface BlockAnchorNode extends LiteralFields<"blockAnchor", "BlockAnch
   readonly id: string
   readonly original: string
 }
+export interface InlineDataFieldKeyNode extends ParentFields<
+  "inlineDataFieldKey",
+  "InlineDataFieldKeyNode",
+  InlineDataFieldContentNode
+> {}
+export interface InlineDataFieldValueNode extends ParentFields<
+  "inlineDataFieldValue",
+  "InlineDataFieldValueNode",
+  InlineDataFieldContentNode
+> {}
+export interface InlineDataFieldNode extends NodeFields<"inlineDataField", "InlineDataFieldNode"> {
+  readonly children: readonly [InlineDataFieldKeyNode, InlineDataFieldValueNode]
+  readonly delimiter: InlineDataFieldDelimiter
+  readonly original: string
+}
 export interface StrongNode extends ParentFields<"strong", "StrongNode", PhrasingContentNode> {}
 export interface TableNode extends ParentFields<"table", "TableNode", TableContentNode> {
   readonly align: Option.Option<ReadonlyArray<typeof TableAlign.Type>>
@@ -159,6 +174,22 @@ export type DefinitionContentNode = DefinitionNode | FootnoteDefinitionNode
 export type BlockDefinitionContentNode = BlockContentNode | DefinitionContentNode
 export type ListContentNode = ListItemNode
 
+export type InlineDataFieldContentNode =
+  | BlockAnchorNode
+  | BreakNode
+  | DeleteNode
+  | EmphasisNode
+  | FootnoteReferenceNode
+  | HtmlNode
+  | ImageNode
+  | ImageReferenceNode
+  | InlineCodeNode
+  | LinkNode
+  | LinkReferenceNode
+  | StrongNode
+  | TextNode
+  | WikilinkNode
+
 export type PhrasingContentNode =
   | BlockAnchorNode
   | BreakNode
@@ -169,6 +200,7 @@ export type PhrasingContentNode =
   | ImageNode
   | ImageReferenceNode
   | InlineCodeNode
+  | InlineDataFieldNode
   | LinkNode
   | LinkReferenceNode
   | StrongNode
@@ -190,6 +222,7 @@ export type RootContentNode =
   | ImageNode
   | ImageReferenceNode
   | InlineCodeNode
+  | InlineDataFieldNode
   | LinkNode
   | LinkReferenceNode
   | ListNode
@@ -222,6 +255,9 @@ export type AnyNode =
   | ImageNode
   | ImageReferenceNode
   | InlineCodeNode
+  | InlineDataFieldKeyNode
+  | InlineDataFieldNode
+  | InlineDataFieldValueNode
   | LinkNode
   | LinkReferenceNode
   | ListNode
@@ -376,6 +412,23 @@ type BlockAnchorNodeEncoded = BaseNode &
     readonly id: string
     readonly original: string
   }
+type InlineDataFieldKeyNodeEncoded = BaseNode &
+  EncodedTag<"InlineDataFieldKeyNode"> & {
+    readonly type: "inlineDataFieldKey"
+    readonly children: ReadonlyArray<InlineDataFieldContentNodeEncoded>
+  }
+type InlineDataFieldValueNodeEncoded = BaseNode &
+  EncodedTag<"InlineDataFieldValueNode"> & {
+    readonly type: "inlineDataFieldValue"
+    readonly children: ReadonlyArray<InlineDataFieldContentNodeEncoded>
+  }
+type InlineDataFieldNodeEncoded = BaseNode &
+  EncodedTag<"InlineDataFieldNode"> & {
+    readonly type: "inlineDataField"
+    readonly children: readonly [InlineDataFieldKeyNodeEncoded, InlineDataFieldValueNodeEncoded]
+    readonly delimiter: InlineDataFieldDelimiter
+    readonly original: string
+  }
 type StrongNodeEncoded = BaseNode &
   EncodedTag<"StrongNode"> & {
     readonly type: "strong"
@@ -426,6 +479,22 @@ type DefinitionContentNodeEncoded = DefinitionNodeEncoded | FootnoteDefinitionNo
 type BlockDefinitionContentNodeEncoded = BlockContentNodeEncoded | DefinitionContentNodeEncoded
 type ListContentNodeEncoded = ListItemNodeEncoded
 
+type InlineDataFieldContentNodeEncoded =
+  | BlockAnchorNodeEncoded
+  | BreakNodeEncoded
+  | DeleteNodeEncoded
+  | EmphasisNodeEncoded
+  | FootnoteReferenceNodeEncoded
+  | HtmlNodeEncoded
+  | ImageNodeEncoded
+  | ImageReferenceNodeEncoded
+  | InlineCodeNodeEncoded
+  | LinkNodeEncoded
+  | LinkReferenceNodeEncoded
+  | StrongNodeEncoded
+  | TextNodeEncoded
+  | WikilinkNodeEncoded
+
 type PhrasingContentNodeEncoded =
   | BlockAnchorNodeEncoded
   | BreakNodeEncoded
@@ -436,6 +505,7 @@ type PhrasingContentNodeEncoded =
   | ImageNodeEncoded
   | ImageReferenceNodeEncoded
   | InlineCodeNodeEncoded
+  | InlineDataFieldNodeEncoded
   | LinkNodeEncoded
   | LinkReferenceNodeEncoded
   | StrongNodeEncoded
@@ -457,6 +527,7 @@ type RootContentNodeEncoded =
   | ImageNodeEncoded
   | ImageReferenceNodeEncoded
   | InlineCodeNodeEncoded
+  | InlineDataFieldNodeEncoded
   | LinkNodeEncoded
   | LinkReferenceNodeEncoded
   | ListNodeEncoded
@@ -488,6 +559,9 @@ type AnyNodeEncoded =
   | ImageNodeEncoded
   | ImageReferenceNodeEncoded
   | InlineCodeNodeEncoded
+  | InlineDataFieldKeyNodeEncoded
+  | InlineDataFieldNodeEncoded
+  | InlineDataFieldValueNodeEncoded
   | LinkNodeEncoded
   | LinkReferenceNodeEncoded
   | ListNodeEncoded
@@ -513,6 +587,10 @@ const RootContentNodeRef: Schema.Codec<RootContentNode, RootContentNodeEncoded> 
 const PhrasingContentNodeRef: Schema.Codec<PhrasingContentNode, PhrasingContentNodeEncoded> = Schema.suspend(
   (): Schema.Codec<PhrasingContentNode, PhrasingContentNodeEncoded> => PhrasingContentNode
 )
+const InlineDataFieldContentNodeRef: Schema.Codec<InlineDataFieldContentNode, InlineDataFieldContentNodeEncoded> =
+  Schema.suspend(
+    (): Schema.Codec<InlineDataFieldContentNode, InlineDataFieldContentNodeEncoded> => InlineDataFieldContentNode
+  )
 const ListContentNodeRef: Schema.Codec<ListContentNode, ListContentNodeEncoded> = Schema.suspend(
   (): Schema.Codec<ListContentNode, ListContentNodeEncoded> => ListContentNode
 )
@@ -713,6 +791,36 @@ export const BlockAnchorNode: Schema.Codec<BlockAnchorNode, BlockAnchorNodeEncod
   original: Schema.String
 })
 
+export const InlineDataFieldDelimiter = Schema.Literals(["square", "paren"])
+export type InlineDataFieldDelimiter = typeof InlineDataFieldDelimiter.Type
+
+export const InlineDataFieldKeyNode: Schema.Codec<InlineDataFieldKeyNode, InlineDataFieldKeyNodeEncoded> =
+  Schema.Struct({
+    ...BaseNode.fields,
+    _tag: Schema.tagDefaultOmit("InlineDataFieldKeyNode"),
+    type: Schema.tag("inlineDataFieldKey"),
+    children: Schema.Array(InlineDataFieldContentNodeRef)
+  })
+
+export const InlineDataFieldValueNode: Schema.Codec<InlineDataFieldValueNode, InlineDataFieldValueNodeEncoded> =
+  Schema.Struct({
+    ...BaseNode.fields,
+    _tag: Schema.tagDefaultOmit("InlineDataFieldValueNode"),
+    type: Schema.tag("inlineDataFieldValue"),
+    children: Schema.Array(InlineDataFieldContentNodeRef)
+  })
+
+const InlineDataFieldChildren = Schema.Tuple([InlineDataFieldKeyNode, InlineDataFieldValueNode])
+
+export const InlineDataFieldNode: Schema.Codec<InlineDataFieldNode, InlineDataFieldNodeEncoded> = Schema.Struct({
+  ...BaseNode.fields,
+  _tag: Schema.tagDefaultOmit("InlineDataFieldNode"),
+  type: Schema.tag("inlineDataField"),
+  children: InlineDataFieldChildren,
+  delimiter: InlineDataFieldDelimiter,
+  original: Schema.String
+})
+
 export const StrongNode: Schema.Codec<StrongNode, StrongNodeEncoded> = Schema.Struct({
   ...BaseNode.fields,
   _tag: Schema.tagDefaultOmit("StrongNode"),
@@ -786,6 +894,24 @@ export const BlockDefinitionContentNode: Schema.Codec<BlockDefinitionContentNode
 
 export const ListContentNode: Schema.Codec<ListContentNode, ListContentNodeEncoded> = ListItemNode
 
+export const InlineDataFieldContentNode: Schema.Codec<InlineDataFieldContentNode, InlineDataFieldContentNodeEncoded> =
+  Schema.Union([
+    BlockAnchorNode,
+    BreakNode,
+    DeleteNode,
+    EmphasisNode,
+    FootnoteReferenceNode,
+    HtmlNode,
+    ImageNode,
+    ImageReferenceNode,
+    InlineCodeNode,
+    LinkNode,
+    LinkReferenceNode,
+    StrongNode,
+    TextNode,
+    WikilinkNode
+  ]).pipe(Schema.toTaggedUnion("_tag"))
+
 export const PhrasingContentNode: Schema.Codec<PhrasingContentNode, PhrasingContentNodeEncoded> = Schema.Union([
   BlockAnchorNode,
   BreakNode,
@@ -796,6 +922,7 @@ export const PhrasingContentNode: Schema.Codec<PhrasingContentNode, PhrasingCont
   ImageNode,
   ImageReferenceNode,
   InlineCodeNode,
+  InlineDataFieldNode,
   LinkNode,
   LinkReferenceNode,
   StrongNode,
@@ -818,6 +945,7 @@ export const RootContentNode: Schema.Codec<RootContentNode, RootContentNodeEncod
   ImageNode,
   ImageReferenceNode,
   InlineCodeNode,
+  InlineDataFieldNode,
   LinkNode,
   LinkReferenceNode,
   ListNode,
@@ -852,6 +980,9 @@ export const AnyNode: Schema.Codec<AnyNode, AnyNodeEncoded> = Schema.Union([
   ImageNode,
   ImageReferenceNode,
   InlineCodeNode,
+  InlineDataFieldKeyNode,
+  InlineDataFieldNode,
+  InlineDataFieldValueNode,
   LinkNode,
   LinkReferenceNode,
   ListNode,

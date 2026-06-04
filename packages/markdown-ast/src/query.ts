@@ -4,7 +4,11 @@ import {
   HeadingLevel,
   HeadingNode as HeadingNodeSchema,
   type AnyNode,
+  type BlockAnchorNode,
   type HeadingNode,
+  type InlineDataFieldKeyNode,
+  type InlineDataFieldNode,
+  type InlineDataFieldValueNode,
   type PhrasingContentNode,
   type WikilinkNode,
   type YamlFrontmatterNode
@@ -43,6 +47,9 @@ const phrasingText = (node: PhrasingContentNode): string => {
     case "InlineCodeNode":
     case "WikilinkNode": {
       return node.value
+    }
+    case "InlineDataFieldNode": {
+      return inlineDataFieldValueText(node)
     }
     case "DeleteNode":
     case "EmphasisNode":
@@ -106,3 +113,28 @@ export const wikilinks = (node: AnyNode): Iterable<WikilinkNode> =>
 
 export const wikilinksWithTarget = (target: string) => (node: AnyNode): Iterable<WikilinkNode> =>
   Iterable.filter(wikilinks(node), (link) => link.target === target)
+
+export const blockAnchors = (node: AnyNode): Iterable<BlockAnchorNode> =>
+  Iterable.map(
+    findAll(node, ({ node }) => node._tag === "BlockAnchorNode"),
+    ({ node }) => node as BlockAnchorNode
+  )
+
+export const inlineDataFields = (node: AnyNode): Iterable<InlineDataFieldNode> =>
+  Iterable.map(
+    findAll(node, ({ node }) => node._tag === "InlineDataFieldNode"),
+    ({ node }) => node as InlineDataFieldNode
+  )
+
+export const inlineDataFieldKey = (node: InlineDataFieldNode): InlineDataFieldKeyNode => node.children[0]
+
+export const inlineDataFieldValue = (node: InlineDataFieldNode): InlineDataFieldValueNode => node.children[1]
+
+export const inlineDataFieldKeyText = (node: InlineDataFieldNode): string =>
+  childrenText(inlineDataFieldKey(node).children)
+
+export const inlineDataFieldValueText = (node: InlineDataFieldNode): string =>
+  childrenText(inlineDataFieldValue(node).children)
+
+export const inlineDataFieldsWithKey = (key: string) => (node: AnyNode): Iterable<InlineDataFieldNode> =>
+  Iterable.filter(inlineDataFields(node), (field) => inlineDataFieldKeyText(field) === key)

@@ -10,7 +10,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@kb/remark-wikilinks": "workspace:*",
+    "@kb/remark-plugin": "workspace:*",
     "@types/mdast": "^4.0.4",
     "effect": "beta",
     "remark-frontmatter": "^5.0.0",

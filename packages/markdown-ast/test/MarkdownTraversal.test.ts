@@ -2,7 +2,7 @@ import { strict as assert } from "node:assert"
 import { Effect, Option } from "effect"
 import { describe, it } from "vitest"
 
-import * as Markdown from "../src/markdown"
+import * as Markdown from "../src"
 const position: Markdown.TextNode["position"] = {
   start: { line: 0, column: 0, offset: 0 },
   end: { line: 0, column: 0, offset: 0 }

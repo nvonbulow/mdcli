@@ -2,7 +2,7 @@ import { strict as assert } from "node:assert"
 import { Effect, Option } from "effect"
 import { describe, it } from "vitest"
 
-import * as Markdown from "../src/markdown"
+import * as Markdown from "../src"
 
 
 const processor = Markdown.MarkdownProcessor.make()

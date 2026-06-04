@@ -5,9 +5,9 @@ settings:
   excludeLinksFromLockfile: false
 
 time:
-  '@effect/platform-node-shared@4.0.0-beta.74': 2026-05-28T13:52:55.043Z
-  '@effect/platform-node@4.0.0-beta.74': 2026-05-28T13:52:54.546Z
-  '@effect/vitest@4.0.0-beta.74': 2026-05-28T13:53:01.812Z
+  '@effect/platform-node-shared@4.0.0-beta.78': 2026-06-03T23:45:39.885Z
+  '@effect/platform-node@4.0.0-beta.78': 2026-06-03T23:45:39.505Z
+  '@effect/vitest@4.0.0-beta.78': 2026-06-03T23:45:45.068Z
   '@esbuild/darwin-arm64@0.28.0': 2026-04-02T20:36:38.146Z
   '@esbuild/linux-arm64@0.28.0': 2026-04-02T20:37:04.125Z
   '@esbuild/linux-x64@0.28.0': 2026-04-02T20:37:40.992Z
@@ -37,7 +37,6 @@ time:
   '@types/ms@2.1.0': 2025-01-16T21:02:46.181Z
   '@types/node@24.12.4': 2026-05-11T22:25:29.000Z
   '@types/unist@3.0.3': 2024-08-15T02:19:16.553Z
-  '@types/vfile@4.0.0': 2019-11-06T21:10:43.598Z
   '@types/ws@8.18.1': 2025-04-01T02:59:54.693Z
   '@vitest/expect@4.1.7': 2026-05-20T07:19:30.353Z
   '@vitest/mocker@4.1.7': 2026-05-20T07:19:19.670Z
@@ -61,7 +60,7 @@ time:
   dequal@2.0.3: 2022-07-11T23:29:04.965Z
   detect-libc@2.1.2: 2025-10-05T12:46:33.077Z
   devlop@1.1.0: 2023-06-29T15:17:11.346Z
-  effect@4.0.0-beta.74: 2026-05-28T13:52:56.627Z
+  effect@4.0.0-beta.78: 2026-06-03T23:45:42.560Z
   es-module-lexer@2.1.0: 2026-04-25T22:50:31.041Z
   esbuild@0.28.0: 2026-04-02T20:38:46.463Z
   escape-string-regexp@5.0.0: 2021-04-17T15:45:50.334Z
@@ -214,7 +213,7 @@ importers:
     dependencies:
       '@effect/platform-node':
         specifier: beta
-        version: 4.0.0-beta.74(effect@4.0.0-beta.74)(ioredis@5.11.0)
+        version: 4.0.0-beta.78(effect@4.0.0-beta.78)(ioredis@5.11.0)
       '@kb/dataview':
         specifier: workspace:*
         version: 0.1.0
@@ -223,7 +222,7 @@ importers:
         version: 0.1.0
       effect:
         specifier: beta
-        version: 4.0.0-beta.74
+        version: 4.0.0-beta.78
       ioredis:
         specifier: ^5.7.0
         version: 5.11.0
@@ -251,13 +250,16 @@ importers:
     dependencies:
       '@effect/platform-node':
         specifier: ^4.0.0-beta.72
-        version: 4.0.0-beta.74(effect@4.0.0-beta.74)(ioredis@5.11.0)
-      '@kb/remark-wikilinks':
+        version: 4.0.0-beta.78(effect@4.0.0-beta.78)(ioredis@5.11.0)
+      '@kb/markdown-ast':
+        specifier: workspace:*
+        version: 0.0.0
+      '@kb/remark-obsidian':
         specifier: workspace:*
         version: 0.1.0
       effect:
         specifier: beta
-        version: 4.0.0-beta.74
+        version: 4.0.0-beta.78
       ioredis:
         specifier: ^5.7.0
         version: 5.11.0
@@ -276,21 +278,9 @@ importers:
       unified:
         specifier: ^11.0.5
         version: 11.0.5
-      unist-util-visit:
-        specifier: ^5.1.0
-        version: 5.1.0
-      unist-util-visit-parents:
-        specifier: ^6.0.2
-        version: 6.0.2
-      vfile:
-        specifier: ^6.0.3
-        version: 6.0.3
       vite:
         specifier: ^6.0.0 || ^7.0.0 || ^8.0.0
         version: 8.0.14(@types/node@24.12.4)(esbuild@0.28.0)(tsx@4.22.3)(yaml@2.9.0)
-      yaml:
-        specifier: ^2.9.0
-        version: 2.9.0
     devDependencies:
       '@types/mdast':
         specifier: ^4.0.4
@@ -301,9 +291,6 @@ importers:
       '@types/unist':
         specifier: ^3.0.3
         version: 3.0.3
-      '@types/vfile':
-        specifier: ^4.0.0
-        version: 4.0.0
       tsx:
         specifier: ^4.22.3
         version: 4.22.3
@@ -321,14 +308,57 @@ importers:
         version: 0.1.0
       effect:
         specifier: beta
-        version: 4.0.0-beta.74
+        version: 4.0.0-beta.78
       vite:
         specifier: ^6.0.0 || ^7.0.0 || ^8.0.0
         version: 8.0.14(@types/node@24.12.4)(esbuild@0.28.0)(tsx@4.22.3)(yaml@2.9.0)
     devDependencies:
       '@effect/vitest':
         specifier: beta
-        version: 4.0.0-beta.74(effect@4.0.0-beta.74)(vitest@4.1.7(@types/node@24.12.4)(vite@8.0.14(@types/node@24.12.4)(esbuild@0.28.0)(tsx@4.22.3)(yaml@2.9.0)))
+        version: 4.0.0-beta.78(effect@4.0.0-beta.78)(vitest@4.1.7(@types/node@24.12.4)(vite@8.0.14(@types/node@24.12.4)(esbuild@0.28.0)(tsx@4.22.3)(yaml@2.9.0)))
+      '@types/node':
+        specifier: ^24.10.1
+        version: 24.12.4
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^4.0.13
+        version: 4.1.7(@types/node@24.12.4)(vite@8.0.14(@types/node@24.12.4)(esbuild@0.28.0)(tsx@4.22.3)(yaml@2.9.0))
+
+  packages/markdown-ast:
+    dependencies:
+      '@kb/remark-wikilinks':
+        specifier: workspace:*
+        version: 0.1.0
+      '@types/mdast':
+        specifier: ^4.0.4
+        version: 4.0.4
+      effect:
+        specifier: beta
+        version: 4.0.0-beta.78
+      remark-frontmatter:
+        specifier: ^5.0.0
+        version: 5.0.0
+      remark-gfm:
+        specifier: ^4.0.1
+        version: 4.0.1
+      remark-parse:
+        specifier: ^11.0.0
+        version: 11.0.0
+      remark-stringify:
+        specifier: ^11.0.0
+        version: 11.0.0
+      unified:
+        specifier: ^11.0.5
+        version: 11.0.5
+      vite:
+        specifier: ^6.0.0 || ^7.0.0 || ^8.0.0
+        version: 8.0.14(@types/node@24.12.4)(esbuild@0.28.0)(tsx@4.22.3)(yaml@2.9.0)
+      yaml:
+        specifier: ^2.9.0
+        version: 2.9.0
+    devDependencies:
       '@types/node':
         specifier: ^24.10.1
         version: 24.12.4
@@ -429,7 +459,7 @@ importers:
         version: 4.0.4
       effect:
         specifier: beta
-        version: 4.0.0-beta.74
+        version: 4.0.0-beta.78
       glob:
         specifier: ^13.0.6
         version: 13.0.6
@@ -454,7 +484,7 @@ importers:
     devDependencies:
       '@effect/vitest':
         specifier: beta
-        version: 4.0.0-beta.74(effect@4.0.0-beta.74)(vitest@4.1.7(@types/node@24.12.4)(vite@8.0.14(@types/node@24.12.4)(esbuild@0.28.0)(tsx@4.22.3)(yaml@2.9.0)))
+        version: 4.0.0-beta.78(effect@4.0.0-beta.78)(vitest@4.1.7(@types/node@24.12.4)(vite@8.0.14(@types/node@24.12.4)(esbuild@0.28.0)(tsx@4.22.3)(yaml@2.9.0)))
       '@types/node':
         specifier: ^24.10.1
         version: 24.12.4
@@ -467,23 +497,23 @@ importers:
 
 packages:
 
-  '@effect/platform-node-shared@4.0.0-beta.74':
-    resolution: {integrity: sha512-C6C2hXixNcZXLaFF2u7B/FtOsqpdY7luaPuiGFBJza0P7EnYDkwaT3kB6lv7l/qctmkADc24qOsSCWIKRbC4jg==}
+  '@effect/platform-node-shared@4.0.0-beta.78':
+    resolution: {integrity: sha512-mo0ddTPATyCMyqzQasYDL7+NI29vozoMplom+qu9f/onDTd4xG5hvEEfGxfL0Ljygui6keG/YE/E9OZVf2z5WA==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
-      effect: ^4.0.0-beta.74
+      effect: ^4.0.0-beta.78
 
-  '@effect/platform-node@4.0.0-beta.74':
-    resolution: {integrity: sha512-/W16mKqxvhWINLjufzc0log1sl57exXQfwd+em398/zKCbmU3S7snXTDMN6w0ju2TtgK35qrsoGBXEochij6Sg==}
+  '@effect/platform-node@4.0.0-beta.78':
+    resolution: {integrity: sha512-8ONrIS5/R9dq+0BJ6v3kUXNEkfjU6S3GzIYCH5gmHdiriRvIoBhXYNAITfRvZpfx1JPrKuP70cHyuQDjmJcDkQ==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
-      effect: ^4.0.0-beta.74
+      effect: ^4.0.0-beta.78
       ioredis: ^5.7.0
 
-  '@effect/vitest@4.0.0-beta.74':
-    resolution: {integrity: sha512-+SFcjtbboJdWA+cP7JFW7Gp1PL7vj7uqvBnh9xY7JFU8VMsrHN5mblsqE7l7+ZFGpJvBGLgjGrhfe8QZ7f5vgg==}
+  '@effect/vitest@4.0.0-beta.78':
+    resolution: {integrity: sha512-5KQsQYrQ/o7mfOVAxRtNnfD9M0W4OI6yQd0n/m2N7OOLxTdX4FwN4s/X4obykBC7ZEwH+bzMrFJiB4pq9lrQKQ==}
     peerDependencies:
-      effect: ^4.0.0-beta.74
+      effect: ^4.0.0-beta.78
       vitest: ^3.0.0 || ^4.0.0
 
   '@esbuild/darwin-arm64@0.28.0':
@@ -657,9 +687,6 @@ packages:
   '@types/unist@3.0.3':
     resolution: {integrity: sha512-ko/gIFJRv177XgZsZcBwnqJN5x/Gien8qNOn0D5bQU/zAzVf9Zt3BlcUiLqhV9y4ARk0GbT3tnUiPNgnTXzc/Q==}
 
-  '@types/vfile@4.0.0':
-    resolution: {integrity: sha512-eleP0/Cz8uVWxARDLi3Axq2+fDdN4ibAXoC6Pv8p6s7znXaUL7XvhgeIhjCiNMnvlLNP+tmCLd+RuCryGgmtEg==}
-
   '@types/ws@8.18.1':
     resolution: {integrity: sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==}
 
@@ -749,8 +776,8 @@ packages:
   devlop@1.1.0:
     resolution: {integrity: sha512-RWmIqhcFf1lRYBvNmr7qTNuyCt/7/ns2jbpp1+PalgE/rDQcBT0fioSMUpJ93irlUhC5hrg4cYqe6U+0ImW0rA==}
 
-  effect@4.0.0-beta.74:
-    resolution: {integrity: sha512-Yx+Kh12U+i2FmjwEfKs+ePFmpMd43RPD1oGqc/VraSS9bYzvF0Ff3PojwEFEVEewp8xc92Uxu28gTspU4qyvHA==}
+  effect@4.0.0-beta.78:
+    resolution: {integrity: sha512-j79Rl9QpHwMz/ZJWLNpZoiVj9N7zHqiLKN5EcYd/A8J1oqejILWQLfc4HPlvqHqKC8SK55LJ+X4gy4ONJ+JpfQ==}
 
   es-module-lexer@2.1.0:
     resolution: {integrity: sha512-n27zTYMjYu1aj4MjCWzSP7G9r75utsaoc8m61weK+W8JMBGGQybd43GstCXZ3WNmSFtGT9wi59qQTW6mhTR5LQ==}
@@ -1307,23 +1334,23 @@ packages:
 
 snapshots:
 
-  '@effect/platform-node-shared@4.0.0-beta.74(effect@4.0.0-beta.74)':
+  '@effect/platform-node-shared@4.0.0-beta.78(effect@4.0.0-beta.78)':
     dependencies:
       '@types/ws': 8.18.1
-      effect: 4.0.0-beta.74
+      effect: 4.0.0-beta.78
       ws: 8.21.0
 
-  '@effect/platform-node@4.0.0-beta.74(effect@4.0.0-beta.74)(ioredis@5.11.0)':
+  '@effect/platform-node@4.0.0-beta.78(effect@4.0.0-beta.78)(ioredis@5.11.0)':
     dependencies:
-      '@effect/platform-node-shared': 4.0.0-beta.74(effect@4.0.0-beta.74)
-      effect: 4.0.0-beta.74
+      '@effect/platform-node-shared': 4.0.0-beta.78(effect@4.0.0-beta.78)
+      effect: 4.0.0-beta.78
       ioredis: 5.11.0
       mime: 4.1.0
       undici: 8.3.0
-  ? '@effect/vitest@4.0.0-beta.74(effect@4.0.0-beta.74)(vitest@4.1.7(@types/node@24.12.4)(vite@8.0.14(@types/node@24.12.4)(esbuild@0.28.0)(tsx@4.22.3)(yaml@2.9.0)))'
+  ? '@effect/vitest@4.0.0-beta.78(effect@4.0.0-beta.78)(vitest@4.1.7(@types/node@24.12.4)(vite@8.0.14(@types/node@24.12.4)(esbuild@0.28.0)(tsx@4.22.3)(yaml@2.9.0)))'
 
   : dependencies:
-      effect: 4.0.0-beta.74
+      effect: 4.0.0-beta.78
       vitest: 4.1.7(@types/node@24.12.4)(vite@8.0.14(@types/node@24.12.4)(esbuild@0.28.0)(tsx@4.22.3)(yaml@2.9.0))
 
   '@esbuild/darwin-arm64@0.28.0': {}
@@ -1392,10 +1419,6 @@ snapshots:
       undici-types: 7.16.0
 
   '@types/unist@3.0.3': {}
-
-  '@types/vfile@4.0.0':
-    dependencies:
-      vfile: 6.0.3
 
   '@types/ws@8.18.1':
     dependencies:
@@ -1479,7 +1502,7 @@ snapshots:
     dependencies:
       dequal: 2.0.3
 
-  effect@4.0.0-beta.74:
+  effect@4.0.0-beta.78:
     dependencies:
       '@standard-schema/spec': 1.1.0
       fast-check: 4.8.0

@@ -9,23 +9,19 @@
   },
   "dependencies": {
     "@effect/platform-node": "^4.0.0-beta.72",
-    "@kb/remark-wikilinks": "workspace:*",
+    "@kb/markdown-ast": "workspace:*",
+    "@kb/remark-obsidian": "workspace:*",
     "effect": "beta",
     "remark-frontmatter": "^5.0.0",
     "remark-gfm": "^4.0.1",
     "remark-parse": "^11.0.0",
     "remark-stringify": "^11.0.0",
-    "unified": "^11.0.5",
-    "unist-util-visit": "^5.1.0",
-    "unist-util-visit-parents": "^6.0.2",
-    "vfile": "^6.0.3",
-    "yaml": "^2.9.0"
+    "unified": "^11.0.5"
   },
   "devDependencies": {
     "@types/mdast": "^4.0.4",
     "@types/node": "^24.12.4",
     "@types/unist": "^3.0.3",
-    "@types/vfile": "^4.0.0",
     "tsx": "^4.22.3",
     "typescript": "^5.9.3",
     "vitest": "^4.1.7"

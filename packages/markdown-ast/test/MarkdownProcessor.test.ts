@@ -7,7 +7,7 @@ import type { Processor } from "unified"
 import { unified } from "unified"
 import { describe, it } from "vitest"
 
-import * as Markdown from "../src/markdown"
+import * as Markdown from "../src"
 
 type MarkdownUnifiedProcessor = Processor<MdastRoot, MdastRoot, MdastRoot, MdastRoot, string>
 

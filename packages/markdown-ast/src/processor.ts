@@ -14,14 +14,14 @@ import { markdownStringifyOptions } from "./stringify.js"
 type MarkdownUnifiedProcessor = Processor<MdastRoot, MdastRoot, MdastRoot, MdastRoot, string>
 
 export class MarkdownParseError extends Schema.TaggedErrorClass<MarkdownParseError>(
-  "@kb/spike/markdown/MarkdownParseError"
+  "@kb/markdown-ast/MarkdownParseError"
 )("MarkdownParseError", {
   message: Schema.String,
   input: Schema.optionalKey(Schema.String)
 }) {}
 
 export class MarkdownStringifyError extends Schema.TaggedErrorClass<MarkdownStringifyError>(
-  "@kb/spike/markdown/MarkdownStringifyError"
+  "@kb/markdown-ast/MarkdownStringifyError"
 )("MarkdownStringifyError", {
   message: Schema.String
 }) {}
@@ -32,7 +32,7 @@ export type MarkdownProcessorService = {
 }
 
 export class MarkdownProcessor extends Context.Service<MarkdownProcessor, MarkdownProcessorService>()(
-  "@kb/spike/markdown/MarkdownProcessor"
+  "@kb/markdown-ast/MarkdownProcessor"
 ) {
   static make(processor: MarkdownUnifiedProcessor = defaultProcessor()): MarkdownProcessorService {
     return makeMarkdownProcessor(processor)

@@ -2,7 +2,7 @@ import { NodeRuntime, NodeServices } from "@effect/platform-node"
 import { Array as EffectArray, Console, Effect, Option, Trie, pipe, Iterable } from "effect"
 import { FileSystem } from "effect/FileSystem"
 
-import * as Markdown from "./markdown"
+import * as Markdown from "@kb/markdown-ast"
 import path from "path/posix"
 
 const tableOfContentsLines = (

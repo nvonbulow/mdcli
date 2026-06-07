@@ -9,7 +9,7 @@ import {
 } from "@kb/markdown-ast"
 import { Chunk, Context, Effect, Option, Result, String as Str, Trie } from "effect"
 import { Markdown } from "./markdown/Markdown"
-import { MarkdownFile, type MarkdownTree, type SourcePosition } from "./markdown/MarkdownModel"
+import { MarkdownFile, sourceRef, type MarkdownTree, type SourcePosition, type SourceRef } from "./markdown/MarkdownModel"
 
 import type { VaultIoError } from "./VaultErrors"
 
@@ -19,6 +19,7 @@ export type VaultRecord<Node> = {
   readonly path: string
   readonly file: MarkdownFile
   readonly node: Node
+  readonly source: SourceRef<Node>
   readonly position?: SourcePosition | undefined
 }
 
@@ -195,67 +196,49 @@ const diagnosticsForScope = (tree: MarkdownTree, scope: VaultScope): Chunk.Chunk
 
 export const frontmatterRecordsForFile = (path: string, file: MarkdownFile): Chunk.Chunk<VaultFrontmatterRecord> =>
   Chunk.map(Markdown.frontmatter(file), (node) => ({
-    path,
-    file,
-    node,
+    ...sourceRecord(path, file, node),
     value: frontmatterValue(file, node),
     language: "yaml",
-    ...optionalPosition(Markdown.position(node))
   }))
 
 export const headingRecordsForFile = (path: string, file: MarkdownFile): Chunk.Chunk<VaultHeadingRecord> =>
   Chunk.map(Markdown.headings(file), (node) => ({
-    path,
-    file,
-    node,
+    ...sourceRecord(path, file, node),
     depth: node.depth,
     text: Markdown.text(node),
-    ...optionalPosition(Markdown.position(node))
   }))
 
 export const linkRecordsForFile = (path: string, file: MarkdownFile): Chunk.Chunk<VaultLinkRecord> =>
   Chunk.map(Markdown.wikilinks(file), (node) => ({
-    path,
-    file,
-    node,
+    ...sourceRecord(path, file, node),
     target: node.target,
     value: node.value,
     original: node.original,
     ...optionalString("alias", optionString(node.alias)),
     ...optionalString("heading", optionString(node.header)),
     ...optionalString("block", optionString(node.block)),
-    ...optionalPosition(Markdown.position(node))
   }))
 
 export const tagRecordsForFile = (path: string, file: MarkdownFile): Chunk.Chunk<VaultTagRecord> =>
   Chunk.map(Markdown.tags(file), (node) => ({
-    path,
-    file,
-    node,
+    ...sourceRecord(path, file, node),
     value: node.value,
-    ...optionalPosition(Markdown.position(node))
   }))
 
 export const listItemRecordsForFile = (path: string, file: MarkdownFile): Chunk.Chunk<VaultListItemRecord> =>
   Chunk.map(Markdown.listItems(file), (node) => ({
-    path,
-    file,
-    node,
+    ...sourceRecord(path, file, node),
     text: Markdown.listItemText(node),
     ...optionalChecked(optionValue(node.checked)),
-    ...optionalPosition(Markdown.position(node))
   }))
 
 
 export const fencedBlockRecordsForFile = (path: string, file: MarkdownFile): Chunk.Chunk<VaultFencedBlockRecord> =>
   Chunk.map(Markdown.fencedBlocks(file), (node) => ({
-    path,
-    file,
-    node,
+    ...sourceRecord(path, file, node),
     value: node.value,
     ...optionalString("language", Markdown.fencedBlockLanguage(node)),
     ...optionalString("meta", Markdown.fencedBlockMeta(node)),
-    ...optionalPosition(Markdown.position(node))
   }))
 
 const markdownFileAtPath = (path: string, file: MarkdownFile): MarkdownFile =>
@@ -369,6 +352,21 @@ const optionValue = <Value>(option: Option.Option<Value>): Value | undefined =>
   Option.isSome(option) ? option.value : undefined
 
 const optionString = (option: Option.Option<string>): string | undefined => optionValue(option)
+
+const sourceRecord = <Node>(
+  path: string,
+  file: MarkdownFile,
+  node: Node
+): VaultRecord<Node> => {
+  const position = Markdown.position(node)
+  return {
+    path,
+    file,
+    node,
+    source: sourceRef(path, file, node, position),
+    ...optionalPosition(position)
+  }
+}
 
 const optionalPosition = <P>(position: P | undefined): { readonly position?: P } => {
   if (position === undefined) {

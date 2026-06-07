@@ -15,7 +15,6 @@ import {
   type MarkdownParseError,
   type VaultScope
 } from "@kb/vault-core"
-import { CalendarService } from "@kb/vault-tasks"
 import { Effect, Layer, Result, Trie } from "effect"
 
 const testVault = {
@@ -66,10 +65,10 @@ const programLayer = DataviewProgram.layerNoDeps.pipe(
       DataviewParser.layerNoDeps,
       DataviewVaultRecordSource.layerNoDeps,
       DataviewEvaluator.layerNoDeps,
-      DataviewFunctionRegistry.layerNoDeps
+      DataviewFunctionRegistry.layerTest("2026-05-23")
     )
   ),
-  Layer.provide(Layer.mergeAll(vaultLayer(testVault), CalendarService.layerTest("2026-05-23")))
+  Layer.provide(vaultLayer(testVault))
 )
 
 

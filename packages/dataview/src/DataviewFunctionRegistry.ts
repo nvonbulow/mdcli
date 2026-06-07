@@ -1,5 +1,5 @@
-import { CalendarService, type IsoDate } from "@kb/vault-tasks"
 import * as Context from "effect/Context"
+import * as DateTime from "effect/DateTime"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
 import type { DataviewFunctions } from "./DataviewEvaluator"
@@ -13,20 +13,27 @@ export class DataviewFunctionRegistry extends Context.Service<
   DataviewFunctionRegistry,
   DataviewFunctionRegistryService
 >()("@kb/dataview/DataviewFunctionRegistry") {
-  static readonly layerNoDeps: Layer.Layer<DataviewFunctionRegistry, never, CalendarService> = Layer.effect(
+  static readonly layerNoDeps: Layer.Layer<DataviewFunctionRegistry> = Layer.succeed(
     this,
-    Effect.gen(function* () {
-      const calendar = yield* CalendarService
-      const functions = Effect.fn("@kb/dataview/DataviewFunctionRegistry.functions")(function* () {
-        const today = yield* calendar.today()
-        return dataviewFunctions(today)
+    DataviewFunctionRegistry.of({
+      functions: Effect.fn("@kb/dataview/DataviewFunctionRegistry.functions")(function* () {
+        const now = yield* DateTime.now
+        return dataviewFunctions(DateTime.formatIsoDateUtc(now))
       })
-      return DataviewFunctionRegistry.of({ functions })
     })
   )
+
+  static layerTest(today: string): Layer.Layer<DataviewFunctionRegistry> {
+    return Layer.succeed(
+      this,
+      DataviewFunctionRegistry.of({
+        functions: () => Effect.succeed(dataviewFunctions(today))
+      })
+    )
+  }
 }
 
-const dataviewFunctions = (today: IsoDate): DataviewFunctions => ({
+const dataviewFunctions = (today: string): DataviewFunctions => ({
   contains: (args) => {
     const haystack = args[0]
     const needle = scalarText(args[1] ?? null)

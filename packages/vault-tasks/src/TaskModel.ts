@@ -1,5 +1,6 @@
 import * as MarkdownAst from "@kb/markdown-ast"
 import { MarkdownModel } from "@kb/vault-core"
+import * as DateTime from "effect/DateTime"
 import { Data, Effect, Option, Schema, String as Str } from "effect"
 
 export class TaskParseError extends Schema.TaggedErrorClass<TaskParseError>("@kb/vault-tasks/TaskParseError")(
@@ -193,10 +194,10 @@ const isIsoDate = (value: string): value is IsoDate => {
     return false
   }
 
-  const year = Number(value.slice(0, 4))
-  const month = Number(value.slice(5, 7))
-  const day = Number(value.slice(8, 10))
-  return month >= 1 && month <= 12 && day >= 1 && day <= daysInMonth(year, month)
+  return Option.match(DateTime.make(value), {
+    onNone: () => false,
+    onSome: (dateTime) => DateTime.formatIsoDateUtc(dateTime) === value
+  })
 }
 
 const dateField = <Key extends "scheduled" | "due" | "completed">(
@@ -205,18 +206,3 @@ const dateField = <Key extends "scheduled" | "due" | "completed">(
 ): Partial<Record<Key, IsoDate>> =>
   value !== undefined && isIsoDate(value) ? ({ [key]: value } as Partial<Record<Key, IsoDate>>) : {}
 
-const daysInMonth = (year: number, month: number): number => {
-  switch (month) {
-    case 2:
-      return isLeapYear(year) ? 29 : 28
-    case 4:
-    case 6:
-    case 9:
-    case 11:
-      return 30
-    default:
-      return 31
-  }
-}
-
-const isLeapYear = (year: number): boolean => year % 400 === 0 || (year % 4 === 0 && year % 100 !== 0)

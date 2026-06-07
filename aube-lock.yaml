@@ -312,9 +312,6 @@ importers:
 
   packages/dataview:
     dependencies:
-      '@kb/vault-tasks':
-        specifier: workspace:*
-        version: 0.1.0
       effect:
         specifier: beta
         version: 4.0.0-beta.78

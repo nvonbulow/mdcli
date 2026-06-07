@@ -12,7 +12,6 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@kb/vault-tasks": "workspace:*",
     "effect": "beta"
   },
   "devDependencies": {

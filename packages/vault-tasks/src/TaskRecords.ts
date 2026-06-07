@@ -1,7 +1,7 @@
 import { MarkdownProcessor, type ListItemNode, type MarkdownStringifyError } from "@kb/markdown-ast"
 import { Chunk, Effect, Option, Result, Trie } from "effect"
 import { Markdown, MarkdownModel, type VaultScope } from "@kb/vault-core"
-import { ParsedTask, Task, TaskSource } from "./TaskModel"
+import { Task } from "./TaskModel"
 
 type MarkdownFile = MarkdownModel.MarkdownFile
 type MarkdownTree = MarkdownModel.MarkdownTree
@@ -12,7 +12,7 @@ export type VaultTaskRecord = {
   readonly file: MarkdownFile
   readonly node: ListItemNode
   readonly position?: SourcePosition | undefined
-  readonly task: ParsedTask
+  readonly task: Task
   readonly done: boolean
   readonly text: string
   readonly fields: Readonly<Record<string, string>>
@@ -27,7 +27,7 @@ export const taskRecordsForFile = (
   Effect.gen(function* () {
     let records = Chunk.empty<VaultTaskRecord>()
     for (const node of Markdown.tasks(file)) {
-      const task = yield* parsedTaskFromNode(path, node)
+      const task = yield* taskFromNode(path, file, node)
       if (Option.isSome(task)) {
         records = Chunk.append(records, {
           path,
@@ -39,7 +39,7 @@ export const taskRecordsForFile = (
           fields: task.value.fields,
           unknownFields: task.value.unknownFields,
           tags: Chunk.fromIterable(task.value.tags),
-          ...optionalPosition(Markdown.position(node))
+          ...optionalPosition(task.value.source?.position)
         })
       }
     }
@@ -66,32 +66,31 @@ export const taskRecordsForTreeNoDeps = (
 ): Effect.Effect<Chunk.Chunk<VaultTaskRecord>, MarkdownStringifyError> =>
   taskRecordsForTree(scope, tree).pipe(Effect.provide(MarkdownProcessor.layer))
 
-const parsedTaskFromNode = (
+const taskFromNode = (
   path: string,
+  file: MarkdownFile,
   node: ListItemNode
-): Effect.Effect<Option.Option<ParsedTask>, MarkdownStringifyError, MarkdownProcessor> =>
+): Effect.Effect<Option.Option<Task>, MarkdownStringifyError, MarkdownProcessor> =>
   Effect.map(Task.from(node), (task) =>
     Option.map(task, (task) => {
       const position = Markdown.position(node)
-      return new ParsedTask({
-        done: task.done,
-        text: task.text,
-        source: new TaskSource({
-          path,
-          lineNumber: position?.start.line ?? 1,
-          ...optionalPosition(position)
-        }),
-        fields: task.fields,
-        unknownFields: task.unknownFields,
-        tags: task.tags,
-        ...optionalValue("scheduled", task.scheduled),
-        ...optionalValue("due", task.due),
-        ...optionalValue("completed", task.completed),
-        ...optionalValue("depends", task.depends),
-        ...optionalValue("repeat", task.repeat),
-        ...optionalValue("area", task.area),
-        ...optionalValue("project", task.project)
-      })
+      return new Task(
+        {
+          done: task.done,
+          text: task.text,
+          source: MarkdownModel.sourceRef(path, file, node, position),
+          fields: task.fields,
+          unknownFields: task.unknownFields,
+          tags: task.tags,
+          ...optionalValue("scheduled", task.scheduled),
+          ...optionalValue("due", task.due),
+          ...optionalValue("completed", task.completed),
+          ...optionalValue("depends", task.depends),
+          ...optionalValue("repeat", task.repeat),
+          ...optionalValue("area", task.area),
+          ...optionalValue("project", task.project)
+        }
+      )
     })
   )
 

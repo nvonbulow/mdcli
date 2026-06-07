@@ -8,7 +8,7 @@ import {
   type DataviewValue
 } from "@kb/dataview"
 import { fromPath, fromPattern, isGlobPattern, VaultService, type VaultScope } from "@kb/vault-core"
-import { type ParsedTask, taskRecordsForTreeNoDeps } from "@kb/vault-tasks"
+import { type Task, taskRecordsForTreeNoDeps } from "@kb/vault-tasks"
 import * as Chunk from "effect/Chunk"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
@@ -35,7 +35,7 @@ export class DataviewVaultRecordSource {
 
 export const layerNoDeps = DataviewVaultRecordSource.layerNoDeps
 
-const taskRecord = (task: ParsedTask): DataviewRecord =>
+const taskRecord = (task: Task): DataviewRecord =>
   new DataviewRecord({
     original: task,
     fields: taskFields(task)
@@ -61,25 +61,30 @@ const scopeFromExpression = (expression: DataviewExpression): Effect.Effect<Vaul
   }
 }
 
-const taskFields = (task: ParsedTask): Readonly<Record<string, DataviewValue>> => ({
-  ...task.fields,
-  ...task.unknownFields,
-  task: task.text,
-  text: task.text,
-  completed: task.done,
-  scheduled: task.scheduled ?? task.fields.scheduled ?? null,
-  due: task.due ?? task.fields.due ?? null,
-  depends: task.depends ?? task.fields.depends ?? null,
-  repeat: task.repeat ?? task.fields.repeat ?? null,
-  area: task.area ?? task.fields.area ?? null,
-  project: task.project ?? task.fields.project ?? null,
-  tags: task.tags,
-  path: task.source.path,
-  line: task.source.lineNumber,
-  "file.path": task.source.path,
-  "file.link": task.source.path,
-  "file.line": task.source.lineNumber
-})
+const taskFields = (task: Task): Readonly<Record<string, DataviewValue>> => {
+  const path = task.source?.path ?? ""
+  const line = task.source?.position?.start.line ?? 1
+
+  return {
+    ...task.fields,
+    ...task.unknownFields,
+    task: task.text,
+    text: task.text,
+    completed: task.done,
+    scheduled: task.scheduled ?? task.fields.scheduled ?? null,
+    due: task.due ?? task.fields.due ?? null,
+    depends: task.depends ?? task.fields.depends ?? null,
+    repeat: task.repeat ?? task.fields.repeat ?? null,
+    area: task.area ?? task.fields.area ?? null,
+    project: task.project ?? task.fields.project ?? null,
+    tags: task.tags,
+    path,
+    line,
+    "file.path": path,
+    "file.link": path,
+    "file.line": line
+  }
+}
 
 const scopeFromSource = (source: string): Effect.Effect<VaultScope, DataviewEvaluateError> =>
   source.length === 0

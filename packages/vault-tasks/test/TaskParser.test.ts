@@ -33,7 +33,7 @@ describe("Task", () => {
       assert.strictEqual(tasks[1]?.text, "Done item")
       assert.strictEqual(tasks[1]?.done, true)
       assert.strictEqual(tasks[1]?.completed, "2026-05-23")
-      assert.strictEqual("source" in tasks[0]!, false)
+      assert.strictEqual(tasks[0]?.source, undefined)
     })
   )
 

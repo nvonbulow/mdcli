@@ -1,5 +1,6 @@
 import * as MarkdownAst from "@kb/markdown-ast"
-import { Effect, Option, Schema, String as Str } from "effect"
+import { MarkdownModel } from "@kb/vault-core"
+import { Data, Effect, Option, Schema, String as Str } from "effect"
 
 export class TaskParseError extends Schema.TaggedErrorClass<TaskParseError>("@kb/vault-tasks/TaskParseError")(
   "TaskParseError",
@@ -14,37 +15,21 @@ export class TaskParseError extends Schema.TaggedErrorClass<TaskParseError>("@kb
 export const IsoDate = Schema.TemplateLiteral([Schema.Number, "-", Schema.Number, "-", Schema.Number])
 export type IsoDate = typeof IsoDate.Type
 
-export const SourcePoint = Schema.Struct({
-  line: Schema.Number,
-  column: Schema.Number,
-  offset: Schema.optional(Schema.Number)
-})
-
-export const SourcePosition = Schema.Struct({
-  start: SourcePoint,
-  end: SourcePoint
-})
-
-export class TaskSource extends Schema.Class<TaskSource>("@kb/vault-tasks/TaskSource")({
-  path: Schema.String,
-  lineNumber: Schema.Number,
-  position: Schema.optionalKey(SourcePosition)
-}) {}
-
-export class Task extends Schema.Class<Task>("@kb/vault-tasks/Task")({
-  done: Schema.Boolean,
-  text: Schema.String,
-  fields: Schema.Record(Schema.String, Schema.String),
-  unknownFields: Schema.Record(Schema.String, Schema.String),
-  tags: Schema.Array(Schema.String),
-  scheduled: Schema.optionalKey(IsoDate),
-  due: Schema.optionalKey(IsoDate),
-  completed: Schema.optionalKey(IsoDate),
-  depends: Schema.optionalKey(Schema.String),
-  repeat: Schema.optionalKey(Schema.String),
-  area: Schema.optionalKey(Schema.String),
-  project: Schema.optionalKey(Schema.String)
-}) {
+export class Task extends Data.Class<{
+  readonly done: boolean
+  readonly text: string
+  readonly fields: Readonly<Record<string, string>>
+  readonly unknownFields: Readonly<Record<string, string>>
+  readonly tags: ReadonlyArray<string>
+  readonly scheduled?: IsoDate | undefined
+  readonly due?: IsoDate | undefined
+  readonly completed?: IsoDate | undefined
+  readonly depends?: string | undefined
+  readonly repeat?: string | undefined
+  readonly area?: string | undefined
+  readonly project?: string | undefined
+  readonly source?: MarkdownModel.SourceRef<MarkdownAst.ListItemNode> | undefined
+}> {
   static from(
     node: MarkdownAst.ListItemNode
   ): Effect.Effect<Option.Option<Task>, MarkdownAst.MarkdownStringifyError, MarkdownAst.MarkdownProcessor> {
@@ -76,22 +61,6 @@ export class Task extends Schema.Class<Task>("@kb/vault-tasks/Task")({
     })
   }
 }
-
-export class ParsedTask extends Schema.Class<ParsedTask>("@kb/vault-tasks/ParsedTask")({
-  done: Schema.Boolean,
-  text: Schema.String,
-  source: TaskSource,
-  fields: Schema.Record(Schema.String, Schema.String),
-  unknownFields: Schema.Record(Schema.String, Schema.String),
-  tags: Schema.Array(Schema.String),
-  scheduled: Schema.optionalKey(IsoDate),
-  due: Schema.optionalKey(IsoDate),
-  completed: Schema.optionalKey(IsoDate),
-  depends: Schema.optionalKey(Schema.String),
-  repeat: Schema.optionalKey(Schema.String),
-  area: Schema.optionalKey(Schema.String),
-  project: Schema.optionalKey(Schema.String)
-}) {}
 
 export const TaskViewName = Schema.Literals(["today", "week", "open"])
 export type TaskViewName = typeof TaskViewName.Type

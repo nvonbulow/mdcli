@@ -1,13 +1,7 @@
 #!/usr/bin/env -S tsx
 import { NodeRuntime, NodeServices } from "@effect/platform-node"
-import {
-  DataviewEvaluator,
-  DataviewFunctionRegistry,
-  DataviewParser,
-  DataviewProgram,
-  MarkdownDataviewRenderer,
-  MarkdownFenceParser
-} from "@kb/dataview"
+import { DataviewEvaluator, DataviewFunctionRegistry, DataviewParser, DataviewProgram } from "@kb/dataview"
+import { MarkdownDataviewRenderer, MarkdownFenceParser } from "@kb/dataview-markdown"
 import { DataviewVaultRecordSource } from "@kb/dataview-vault"
 import { CheckService } from "@kb/vault-checks"
 import { Glob } from "@kb/vault-core"

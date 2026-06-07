@@ -7,5 +7,3 @@ export { DataviewRecordSource, DataviewRecordSourceError, type DataviewRecordSou
 export { DataviewFunctionRegistry, type DataviewFunctionRegistryService } from "./DataviewFunctionRegistry"
 export { DataviewProgram, type DataviewProgramService } from "./DataviewProgram"
 export { DataviewRenderer, type DataviewRendererService, type OutputFormat } from "./DataviewRenderer"
-export { MarkdownFenceParser, type MarkdownFenceParserService } from "./MarkdownFenceParser"
-export { MarkdownDataviewRenderer, type MarkdownDataviewRendererService } from "./MarkdownDataviewRenderer"

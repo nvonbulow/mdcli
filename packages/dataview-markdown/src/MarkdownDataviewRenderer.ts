@@ -1,11 +1,14 @@
+import {
+  DataviewProgram,
+  DataviewRenderer,
+  type DataviewEvaluateError,
+  type DataviewParseError,
+  type DataviewRecordSourceError,
+  type DataviewRenderError
+} from "@kb/dataview"
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
-import type { DataviewEvaluateError, DataviewParseError } from "./DataviewAst"
-import type { DataviewRenderError } from "./DataviewErrors"
-import { DataviewProgram } from "./DataviewProgram"
-import type { DataviewRecordSourceError } from "./DataviewRecordSource"
-import { DataviewRenderer } from "./DataviewRenderer"
 import { MarkdownFenceParser, type DataviewMarkdownRenderError, type MarkdownFencePart } from "./MarkdownFenceParser"
 
 export type MarkdownDataviewRendererService = {
@@ -24,7 +27,7 @@ export type MarkdownDataviewRendererService = {
 export class MarkdownDataviewRenderer extends Context.Service<
   MarkdownDataviewRenderer,
   MarkdownDataviewRendererService
->()("@kb/dataview/MarkdownDataviewRenderer") {
+>()("@kb/dataview-markdown/MarkdownDataviewRenderer") {
   static readonly layerNoDeps: Layer.Layer<
     MarkdownDataviewRenderer,
     never,

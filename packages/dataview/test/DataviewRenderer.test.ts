@@ -1,16 +1,13 @@
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Layer } from "effect"
+import { Effect } from "effect"
 import {
   DataviewColumn,
   DataviewGroup,
   DataviewMetadata,
-  DataviewProgram,
   DataviewRecord,
   DataviewRenderer,
   DataviewResult,
-  DataviewRow,
-  MarkdownDataviewRenderer,
-  MarkdownFenceParser
+  DataviewRow
 } from "../src"
 
 const baseRecord = new DataviewRecord({ fields: {}, original: undefined })
@@ -40,29 +37,6 @@ const emptyResult = DataviewResult.QueryResult({
   groups: [],
   metadata: new DataviewMetadata({ query: "TASK", source: "Inbox" })
 })
-
-const fakeProgramLayer = Layer.succeed(
-  DataviewProgram,
-  DataviewProgram.of({
-    run: (query) =>
-      Effect.succeed(
-        DataviewResult.QueryResult({
-          columns: [new DataviewColumn({ key: "query", label: "Query" })],
-          rows: [new DataviewRow({ record: baseRecord, cells: { query: query.trim() } })],
-          groups: [],
-          metadata: new DataviewMetadata({ query, source: "fake" })
-        })
-      )
-  })
-)
-
-const fakeRendererLayer = Layer.succeed(
-  DataviewRenderer,
-  DataviewRenderer.of({
-    render: (dataviewResult) =>
-      Effect.succeed(dataviewResult._tag === "QueryResult" ? `[${dataviewResult.rows[0]?.cells.query ?? "empty"}]` : "")
-  })
-)
 
 describe("DataviewRenderer", () => {
   it.effect("renders markdown through the service layer and escapes cells", () =>
@@ -113,59 +87,3 @@ describe("DataviewRenderer", () => {
   )
 })
 
-describe("MarkdownFenceParser", () => {
-  it.effect("extracts dataview fences and preserves surrounding markdown and other fences", () =>
-    Effect.gen(function* () {
-      const parser = yield* MarkdownFenceParser
-      const parts = yield* parser.parse(
-        'Before\n```dataview\nTASK\nFROM "Inbox"\n```\n```ts\nconst value = 1\n```\nAfter'
-      )
-
-      assert.deepStrictEqual(
-        parts.map((part) => part._tag),
-        ["Markdown", "DataviewFence", "Markdown"]
-      )
-      assert.strictEqual(parts[0]?._tag === "Markdown" ? parts[0].text : "", "Before\n")
-      assert.strictEqual(parts[1]?._tag === "DataviewFence" ? parts[1].query : "", 'TASK\nFROM "Inbox"\n')
-      assert.strictEqual(parts[2]?._tag === "Markdown" ? parts[2].text : "", "```ts\nconst value = 1\n```\nAfter")
-    }).pipe(Effect.provide(MarkdownFenceParser.layerNoDeps))
-  )
-
-  it.effect("fails on an unclosed dataview fence", () =>
-    Effect.gen(function* () {
-      const parser = yield* MarkdownFenceParser
-      const error = yield* parser.parse("Intro\n```dataview\nTASK").pipe(Effect.flip)
-
-      assert.strictEqual(error.message, "Unclosed dataview fence")
-      assert.strictEqual(error.line, 2)
-    }).pipe(Effect.provide(MarkdownFenceParser.layerNoDeps))
-  )
-})
-
-describe("MarkdownDataviewRenderer", () => {
-  it.effect("replaces dataview fences and preserves non-dataview fences and markdown", () =>
-    Effect.gen(function* () {
-      const renderer = yield* MarkdownDataviewRenderer
-      const rendered = yield* renderer.renderDocument(
-        '# Title\n\n```dataview\nTASK\nFROM "Inbox"\n```\n\n```text\nunchanged\n```\nTail'
-      )
-
-      assert.strictEqual(rendered, '# Title\n\n[TASK\nFROM "Inbox"]\n\n```text\nunchanged\n```\nTail')
-    }).pipe(
-      Effect.provide(MarkdownDataviewRenderer.layerNoDeps),
-      Effect.provide(Layer.mergeAll(MarkdownFenceParser.layerNoDeps, fakeProgramLayer, fakeRendererLayer))
-    )
-  )
-
-  it.effect("propagates parser failures from service layers", () =>
-    Effect.gen(function* () {
-      const renderer = yield* MarkdownDataviewRenderer
-      const error = yield* renderer.renderDocument("```dataview\nTASK").pipe(Effect.flip)
-
-      assert.strictEqual(error.message, "Unclosed dataview fence")
-    }).pipe(
-      Effect.provide(MarkdownDataviewRenderer.layerNoDeps),
-      Effect.provide(Layer.mergeAll(MarkdownFenceParser.layerNoDeps, fakeProgramLayer, fakeRendererLayer))
-    )
-  )
-})

@@ -1,4 +1,4 @@
-import { MarkdownDataviewRenderer } from "@kb/dataview"
+import { MarkdownDataviewRenderer } from "@kb/dataview-markdown"
 import { VaultService } from "@kb/vault-core"
 import { Console, Effect } from "effect"
 import { Argument, Command } from "effect/unstable/cli"

@@ -1,7 +1,7 @@
+import { DataviewMarkdownBlockRenderError } from "@kb/dataview"
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
-import { DataviewMarkdownBlockRenderError } from "./DataviewErrors"
 
 export type DataviewMarkdownRenderError = DataviewMarkdownBlockRenderError
 
@@ -24,7 +24,7 @@ export type MarkdownFenceParserService = {
 }
 
 export class MarkdownFenceParser extends Context.Service<MarkdownFenceParser, MarkdownFenceParserService>()(
-  "@kb/dataview/MarkdownFenceParser"
+  "@kb/dataview-markdown/MarkdownFenceParser"
 ) {
   static readonly layerNoDeps: Layer.Layer<MarkdownFenceParser> = Layer.effect(
     this,

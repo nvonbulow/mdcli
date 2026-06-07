@@ -1,0 +1,26 @@
+{
+  "name": "@kb/dataview-markdown",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@kb/dataview": "workspace:*",
+    "@kb/dataview-vault": "workspace:*",
+    "@kb/markdown-ast": "workspace:*",
+    "effect": "beta"
+  },
+  "devDependencies": {
+    "@effect/vitest": "beta",
+    "@types/node": "^24.10.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.13"
+  }
+}

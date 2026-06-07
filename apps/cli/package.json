@@ -16,6 +16,7 @@
   "dependencies": {
     "@effect/platform-node": "beta",
     "@kb/dataview": "workspace:*",
+    "@kb/dataview-markdown": "workspace:*",
     "@kb/dataview-vault": "workspace:*",
     "@kb/vault-checks": "workspace:*",
     "@kb/vault-core": "workspace:*",

@@ -1,4 +1,3 @@
-export * from "./DashboardModel"
 export { Markdown } from "./markdown/Markdown"
 export * as MarkdownModel from "./markdown/MarkdownModel"
 export { MarkdownParser, type MarkdownParserService } from "./markdown/MarkdownParser"

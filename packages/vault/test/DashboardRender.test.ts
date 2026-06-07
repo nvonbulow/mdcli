@@ -1,11 +1,8 @@
 import { assert, describe, it } from "@effect/vitest"
-import { MarkdownProcessor } from "@kb/markdown-ast"
 import { Chunk, Effect, FileSystem, Layer, Option, Path, Result, Trie } from "effect"
 import { Markdown } from "../src/markdown/Markdown"
-import type { MarkdownFile } from "../src/markdown/MarkdownModel"
 import * as Glob from "../src/Glob"
 import { VaultService } from "../src/VaultService"
-import { Task } from "../src/TaskModel"
 import { fromPath } from "../src/VaultScope"
 
 const testRoot = "/effect-vault-test"
@@ -127,13 +124,13 @@ describe("VaultService", () => {
 
       assert.strictEqual(first.path, "Inbox.md")
       assert.strictEqual(first.contents, "# Inbox\n- [ ] Old task #task")
-      const firstTasks = yield* parsedTaskValues(first)
+      const firstListItems = Chunk.toReadonlyArray(Markdown.listItems(first))
       assert.deepStrictEqual(
-        firstTasks.map((task) => task.text),
-        ["Old task"]
+        firstListItems.map((item) => Markdown.listItemText(item)),
+        ["Old task #task"]
       )
       assert.deepStrictEqual(
-        firstTasks.map((task) => task.done),
+        firstListItems.map((item) => optionValue(item.checked)),
         [false]
       )
 
@@ -142,21 +139,18 @@ describe("VaultService", () => {
 
       assert.strictEqual(second.path, "Inbox.md")
       assert.strictEqual(second.contents, "# Inbox\n- [x] New task #task")
-      const secondTasks = yield* parsedTaskValues(second)
+      const secondListItems = Chunk.toReadonlyArray(Markdown.listItems(second))
       assert.deepStrictEqual(
-        secondTasks.map((task) => task.text),
-        ["New task"]
+        secondListItems.map((item) => Markdown.listItemText(item)),
+        ["New task #task"]
       )
       assert.deepStrictEqual(
-        secondTasks.map((task) => task.done),
+        secondListItems.map((item) => optionValue(item.checked)),
         [true]
       )
     }).pipe(Effect.provide(vaultLayer(files)))
   })
 })
 
-const parsedTaskValues = (file: MarkdownFile) =>
-  Effect.gen(function* () {
-    const results = yield* Effect.forEach(Chunk.toReadonlyArray(Markdown.tasks(file)), Task.from)
-    return results.flatMap((task) => (Option.isSome(task) ? [task.value] : []))
-  }).pipe(Effect.provide(MarkdownProcessor.layer))
+const optionValue = <Value>(option: Option.Option<Value>): Value | undefined =>
+  Option.isSome(option) ? option.value : undefined

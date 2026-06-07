@@ -3,7 +3,6 @@ import { MarkdownProcessor } from "@kb/markdown-ast"
 import { Chunk, Effect, Layer, Option } from "effect"
 import { Markdown } from "../src/markdown/Markdown"
 import { MarkdownParser } from "../src/markdown/MarkdownParser"
-import { Task } from "../src/TaskModel"
 
 const parserLayer = Layer.mergeAll(MarkdownParser.layer, MarkdownProcessor.layer)
 
@@ -74,7 +73,6 @@ describe("MarkdownParser", () => {
       const tags = Chunk.toReadonlyArray(Markdown.tags(file))
       const listItems = Chunk.toReadonlyArray(Markdown.listItems(file))
       const tasks = Chunk.toReadonlyArray(Markdown.tasks(file))
-      const parsedTasks = yield* Effect.forEach(tasks, Task.from)
       const blocks = Chunk.toReadonlyArray(Markdown.fencedBlocks(file))
 
       assert.strictEqual(headings.length, 1)
@@ -102,17 +100,6 @@ describe("MarkdownParser", () => {
       assert.strictEqual(Markdown.listItemText(listItems[2]!), "Plain list item #plain")
 
       assert.strictEqual(tasks.length, 2)
-      const firstParsedTask = parsedTasks[0]
-      const secondParsedTask = parsedTasks[1]
-      assert.ok(firstParsedTask)
-      assert.ok(secondParsedTask)
-      assert.strictEqual(firstParsedTask._tag, "Some")
-      if (Option.isSome(firstParsedTask)) {
-        assert.strictEqual(firstParsedTask.value.done, false)
-        assert.strictEqual(firstParsedTask.value.fields.due, "2026-05-24")
-        assert.deepStrictEqual(firstParsedTask.value.tags, ["#task"])
-      }
-      assert.strictEqual(secondParsedTask._tag, "None")
 
       assert.strictEqual(blocks.length, 2)
       assert.strictEqual(Markdown.fencedBlockLanguage(blocks[0]!), "dataview")

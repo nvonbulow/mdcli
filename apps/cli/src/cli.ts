@@ -5,10 +5,10 @@ import {
   DataviewFunctionRegistry,
   DataviewParser,
   DataviewProgram,
-  DataviewRecordSource,
   MarkdownDataviewRenderer,
   MarkdownFenceParser
 } from "@kb/dataview"
+import { DataviewVaultRecordSource } from "@kb/dataview-vault"
 import { CheckService } from "@kb/vault-checks"
 import { Glob } from "@kb/vault-core"
 import { CalendarService } from "@kb/vault-tasks"
@@ -27,7 +27,7 @@ const KbCommand = KbRoot.pipe(
   Command.provide(MarkdownDataviewRenderer.layerNoDeps),
   Command.provide(DataviewProgram.layerNoDeps),
   Command.provide(DataviewParser.layerNoDeps),
-  Command.provide(DataviewRecordSource.layerNoDeps),
+  Command.provide(DataviewVaultRecordSource.layerNoDeps),
   Command.provide(DataviewEvaluator.layerNoDeps),
   Command.provide(DataviewFunctionRegistry.layerNoDeps),
   Command.provide(MarkdownFenceParser.layerNoDeps),

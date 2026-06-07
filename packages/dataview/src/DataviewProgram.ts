@@ -1,22 +1,17 @@
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
-import type { MarkdownParseError, MarkdownStringifyError, VaultIoError } from "@kb/vault-core"
-import type { TaskParseError } from "@kb/vault-tasks"
 import type { DataviewEvaluateError, DataviewParseError } from "./DataviewAst"
 import { DataviewEvaluator } from "./DataviewEvaluator"
 import { DataviewFunctionRegistry } from "./DataviewFunctionRegistry"
 import { DataviewParser } from "./DataviewParser"
-import { DataviewRecordSource } from "./DataviewRecordSource"
+import { DataviewRecordSource, type DataviewRecordSourceError } from "./DataviewRecordSource"
 import type { DataviewResult } from "./DataviewResult"
 
 export type DataviewProgramService = {
   readonly run: (
     queryText: string
-  ) => Effect.Effect<
-    DataviewResult,
-    DataviewParseError | DataviewEvaluateError | VaultIoError | TaskParseError | MarkdownParseError | MarkdownStringifyError
-  >
+  ) => Effect.Effect<DataviewResult, DataviewParseError | DataviewEvaluateError | DataviewRecordSourceError>
 }
 
 export class DataviewProgram extends Context.Service<DataviewProgram, DataviewProgramService>()(

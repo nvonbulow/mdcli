@@ -217,6 +217,9 @@ importers:
       '@kb/dataview':
         specifier: workspace:*
         version: 0.1.0
+      '@kb/vault-checks':
+        specifier: workspace:*
+        version: 0.1.0
       '@kb/vault-core':
         specifier: workspace:*
         version: 0.1.0
@@ -414,9 +417,6 @@ importers:
       '@kb/markdown-ast':
         specifier: workspace:*
         version: 0.0.0
-      '@kb/vault-tasks':
-        specifier: workspace:*
-        version: 0.1.0
       effect:
         specifier: beta
         version: 4.0.0-beta.78
@@ -429,6 +429,34 @@ importers:
       vite:
         specifier: ^6.0.0 || ^7.0.0 || ^8.0.0
         version: 8.0.16(@types/node@24.12.4)(esbuild@0.28.0)(tsx@4.22.4)(yaml@2.9.0)
+    devDependencies:
+      '@effect/vitest':
+        specifier: beta
+        version: 4.0.0-beta.78(effect@4.0.0-beta.78)(vitest@4.1.8(@types/node@24.12.4)(vite@8.0.16(@types/node@24.12.4)(esbuild@0.28.0)(tsx@4.22.4)(yaml@2.9.0)))
+      '@types/node':
+        specifier: ^24.10.1
+        version: 24.12.4
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^4.0.13
+        version: 4.1.8(@types/node@24.12.4)(vite@8.0.16(@types/node@24.12.4)(esbuild@0.28.0)(tsx@4.22.4)(yaml@2.9.0))
+
+  packages/vault-checks:
+    dependencies:
+      '@kb/markdown-ast':
+        specifier: workspace:*
+        version: 0.0.0
+      '@kb/vault-core':
+        specifier: workspace:*
+        version: 0.1.0
+      '@kb/vault-tasks':
+        specifier: workspace:*
+        version: 0.1.0
+      effect:
+        specifier: beta
+        version: 4.0.0-beta.78
     devDependencies:
       '@effect/vitest':
         specifier: beta

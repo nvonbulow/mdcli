@@ -1,14 +1,10 @@
 import { assert, describe, it } from "@effect/vitest"
 import { Chunk, Effect, Layer, Result, Trie } from "effect"
 
-import { CheckService, make } from "../src/CheckService"
-import { CheckFinding } from "../src/CheckModel"
-import { MarkdownFile } from "../src/markdown/MarkdownModel"
-import { MarkdownParser } from "../src/markdown/MarkdownParser"
-import { VaultService } from "../src/VaultService"
-import { Vault } from "../src/Vault"
+import { CheckModel, CheckService, make } from "@kb/vault-checks"
+import { MarkdownModel, MarkdownParser, Vault, VaultService } from "@kb/vault-core"
+import * as VaultScope from "@kb/vault-core"
 import { MarkdownParseError, MarkdownProcessor } from "@kb/markdown-ast"
-import * as VaultScope from "../src/VaultScope"
 
 const testRoot = "/effect-check-test"
 
@@ -43,7 +39,7 @@ const vaultLayer = (state: TestVaultState) =>
         parser.parse(contents).pipe(
           Effect.map(
             (file) =>
-              new MarkdownFile({
+              new MarkdownModel.MarkdownFile({
                 path,
                 contents: file.contents,
                 mdast: file.mdast
@@ -66,15 +62,15 @@ const vaultLayer = (state: TestVaultState) =>
             if (failure !== undefined) {
               return Effect.succeed([
                 path,
-                Result.fail(failure) as Result.Result<MarkdownFile, MarkdownParseError>
+                Result.fail(failure) as Result.Result<MarkdownModel.MarkdownFile, MarkdownParseError>
               ] as const)
             }
             return parseMarkdown(path, state.files[absolutePath(path)] ?? "").pipe(
               Effect.match({
                 onFailure: (failure) =>
-                  [path, Result.fail(failure) as Result.Result<MarkdownFile, MarkdownParseError>] as const,
+                  [path, Result.fail(failure) as Result.Result<MarkdownModel.MarkdownFile, MarkdownParseError>] as const,
                 onSuccess: (file) =>
-                  [path, Result.succeed(file) as Result.Result<MarkdownFile, MarkdownParseError>] as const
+                  [path, Result.succeed(file) as Result.Result<MarkdownModel.MarkdownFile, MarkdownParseError>] as const
               })
             )
           })
@@ -150,7 +146,7 @@ const ignoredMarkdownPaths = (files: TestFiles): ReadonlySet<string> => {
   return ignored
 }
 
-const summaries = (findings: Chunk.Chunk<CheckFinding>): ReadonlyArray<FindingSummary> =>
+const summaries = (findings: Chunk.Chunk<CheckModel.CheckFinding>): ReadonlyArray<FindingSummary> =>
   toArray(findings).map((finding) => [
     finding.category,
     finding.severity,
@@ -161,7 +157,7 @@ const summaries = (findings: Chunk.Chunk<CheckFinding>): ReadonlyArray<FindingSu
     finding.relatedPaths === undefined ? [] : toArray(finding.relatedPaths)
   ])
 
-const messages = (findings: Chunk.Chunk<CheckFinding>): ReadonlyArray<string> =>
+const messages = (findings: Chunk.Chunk<CheckModel.CheckFinding>): ReadonlyArray<string> =>
   toArray(findings).map((finding) => finding.message)
 
 describe("CheckService", () => {
@@ -485,7 +481,7 @@ describe("CheckService", () => {
       analyzeFile: (path: string) =>
         Effect.succeed(
           Chunk.of(
-            new CheckFinding({
+            new CheckModel.CheckFinding({
               category: "catalog",
               severity: "warning",
               path,

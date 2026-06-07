@@ -1,6 +1,5 @@
 import type { MarkdownStringifyError } from "@kb/markdown-ast"
 import { Chunk, Context, Effect, Layer, String as Str } from "effect"
-import type * as Glob from "./Glob"
 import {
   ArchiveHeadingCheckAnalyzer,
   DumpInboxCheckAnalyzer,
@@ -11,14 +10,16 @@ import {
   VaultDiagnosticsCheckAnalyzer
 } from "./CheckAnalyzers"
 import type { CheckAnalyzer } from "./CheckAnalyzers"
-import type { VaultHeadingRecord, VaultShape } from "./Vault"
+import { VaultService, type VaultIoError, type VaultScope, type VaultShape } from "@kb/vault-core"
+import type * as VaultCore from "@kb/vault-core"
 import { CheckContext, CheckFinding, CheckReport } from "./CheckModel"
 import type { CheckContextShape, CheckIndexes } from "./CheckModel"
-import { VaultService } from "./VaultService"
-import type { VaultIoError } from "./VaultErrors"
-import type { VaultScope } from "./VaultScope"
 
-export type CheckServiceError = VaultIoError | Glob.GlobError | MarkdownStringifyError
+type EffectSuccess<T> = T extends Effect.Effect<infer A, infer _E, infer _R> ? A : never
+type ChunkItem<T> = T extends Chunk.Chunk<infer A> ? A : never
+type VaultHeadingRecord = ChunkItem<EffectSuccess<ReturnType<VaultShape["headings"]>>>
+
+export type CheckServiceError = VaultIoError | VaultCore.Glob.GlobError | MarkdownStringifyError
 const serviceRegistry = new WeakMap<
   CheckServiceShape,
   { readonly scopedVaultForScope: ScopedVaultForScope; readonly analyzers: ReadonlyArray<CheckAnalyzer> }
@@ -31,7 +32,7 @@ export type CheckServiceShape = {
 }
 type ScopedVaultForScope = (scope: VaultScope) => Effect.Effect<VaultShape, CheckServiceError>
 
-export class CheckService extends Context.Service<CheckService, CheckServiceShape>()("@kb/vault-core/CheckService") {
+export class CheckService extends Context.Service<CheckService, CheckServiceShape>()("@kb/vault-checks/CheckService") {
   static readonly layerNoDeps: Layer.Layer<CheckService, never, VaultService> = Layer.effect(
     CheckService,
     Effect.gen(function* () {

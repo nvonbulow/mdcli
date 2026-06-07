@@ -1,4 +1,4 @@
-import { CheckModel, CheckService, layerDumpOnly, layerHeadingsBundle, layerLinksOnly, layerTasksOnly } from "@kb/vault-core"
+import { CheckModel, CheckService, layerDumpOnly, layerHeadingsBundle, layerLinksOnly, layerTasksOnly } from "@kb/vault-checks"
 import { Chunk, Console, Effect } from "effect"
 import { Command, Flag } from "effect/unstable/cli"
 import { KbRoot } from "./RootCommand"

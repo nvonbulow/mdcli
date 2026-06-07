@@ -1,10 +1,14 @@
 import { Chunk, Context, Effect, Layer, String as Str } from "effect"
 import { taskRecordsForTreeNoDeps } from "@kb/vault-tasks"
+import { VaultService, type VaultShape } from "@kb/vault-core"
+import * as VaultScope from "@kb/vault-core"
 import { CheckContext, CheckFinding } from "./CheckModel"
-import { VaultService, type VaultServiceShape } from "./VaultService"
 import type { CheckServiceError } from "./CheckService"
-import type { VaultHeadingRecord, VaultLinkRecord } from "./Vault"
-import * as VaultScope from "./VaultScope"
+
+type EffectSuccess<T> = T extends Effect.Effect<infer A, infer _E, infer _R> ? A : never
+type ChunkItem<T> = T extends Chunk.Chunk<infer A> ? A : never
+type VaultHeadingRecord = ChunkItem<EffectSuccess<ReturnType<VaultShape["headings"]>>>
+type VaultLinkRecord = ChunkItem<EffectSuccess<ReturnType<VaultShape["links"]>>>
 
 export type CheckAnalyzer = {
   readonly analyzeFile: (path: string) => Effect.Effect<Chunk.Chunk<CheckFinding>, CheckServiceError, CheckContext>
@@ -201,7 +205,7 @@ const archiveHeadings = Effect.fn("ArchiveHeadingCheckAnalyzer.analyzeFile")(fun
 })
 
 const dumpInbox = (
-  vault: VaultServiceShape
+  vault: { readonly readText: (path: string) => Effect.Effect<string, CheckServiceError> }
 ): ((path: string) => Effect.Effect<Chunk.Chunk<CheckFinding>, CheckServiceError, CheckContext>) =>
   Effect.fn("DumpInboxCheckAnalyzer.analyzeFile")(function* (path: string) {
     if (basename(path) !== "dump.md") {
@@ -288,7 +292,7 @@ const taskMetadata = Effect.fn("TaskMetadataCheckAnalyzer.analyzeFile")(function
 })
 
 export class VaultDiagnosticsCheckAnalyzer extends Context.Service<VaultDiagnosticsCheckAnalyzer, CheckAnalyzer>()(
-  "@kb/vault-core/VaultDiagnosticsCheckAnalyzer"
+  "@kb/vault-checks/VaultDiagnosticsCheckAnalyzer"
 ) {
   static readonly layer: Layer.Layer<VaultDiagnosticsCheckAnalyzer> = Layer.succeed(
     VaultDiagnosticsCheckAnalyzer,
@@ -297,7 +301,7 @@ export class VaultDiagnosticsCheckAnalyzer extends Context.Service<VaultDiagnost
 }
 
 export class LinkIntegrityCheckAnalyzer extends Context.Service<LinkIntegrityCheckAnalyzer, CheckAnalyzer>()(
-  "@kb/vault-core/LinkIntegrityCheckAnalyzer"
+  "@kb/vault-checks/LinkIntegrityCheckAnalyzer"
 ) {
   static readonly layer: Layer.Layer<LinkIntegrityCheckAnalyzer> = Layer.succeed(
     LinkIntegrityCheckAnalyzer,
@@ -306,7 +310,7 @@ export class LinkIntegrityCheckAnalyzer extends Context.Service<LinkIntegrityChe
 }
 
 export class DuplicateHeadingCheckAnalyzer extends Context.Service<DuplicateHeadingCheckAnalyzer, CheckAnalyzer>()(
-  "@kb/vault-core/DuplicateHeadingCheckAnalyzer"
+  "@kb/vault-checks/DuplicateHeadingCheckAnalyzer"
 ) {
   static readonly layer: Layer.Layer<DuplicateHeadingCheckAnalyzer> = Layer.succeed(
     DuplicateHeadingCheckAnalyzer,
@@ -315,7 +319,7 @@ export class DuplicateHeadingCheckAnalyzer extends Context.Service<DuplicateHead
 }
 
 export class TitleDriftCheckAnalyzer extends Context.Service<TitleDriftCheckAnalyzer, CheckAnalyzer>()(
-  "@kb/vault-core/TitleDriftCheckAnalyzer"
+  "@kb/vault-checks/TitleDriftCheckAnalyzer"
 ) {
   static readonly layer: Layer.Layer<TitleDriftCheckAnalyzer> = Layer.succeed(
     TitleDriftCheckAnalyzer,
@@ -324,7 +328,7 @@ export class TitleDriftCheckAnalyzer extends Context.Service<TitleDriftCheckAnal
 }
 
 export class ArchiveHeadingCheckAnalyzer extends Context.Service<ArchiveHeadingCheckAnalyzer, CheckAnalyzer>()(
-  "@kb/vault-core/ArchiveHeadingCheckAnalyzer"
+  "@kb/vault-checks/ArchiveHeadingCheckAnalyzer"
 ) {
   static readonly layer: Layer.Layer<ArchiveHeadingCheckAnalyzer> = Layer.succeed(
     ArchiveHeadingCheckAnalyzer,
@@ -333,19 +337,19 @@ export class ArchiveHeadingCheckAnalyzer extends Context.Service<ArchiveHeadingC
 }
 
 export class DumpInboxCheckAnalyzer extends Context.Service<DumpInboxCheckAnalyzer, CheckAnalyzer>()(
-  "@kb/vault-core/DumpInboxCheckAnalyzer"
+  "@kb/vault-checks/DumpInboxCheckAnalyzer"
 ) {
   static readonly layer: Layer.Layer<DumpInboxCheckAnalyzer, never, VaultService> = Layer.effect(
     DumpInboxCheckAnalyzer,
     Effect.gen(function* () {
-      const vault: VaultServiceShape = yield* VaultService
+      const vault: { readonly readText: (path: string) => Effect.Effect<string, CheckServiceError> } = yield* VaultService
       return DumpInboxCheckAnalyzer.of({ analyzeFile: dumpInbox(vault) })
     })
   )
 }
 
 export class TaskMetadataCheckAnalyzer extends Context.Service<TaskMetadataCheckAnalyzer, CheckAnalyzer>()(
-  "@kb/vault-core/TaskMetadataCheckAnalyzer"
+  "@kb/vault-checks/TaskMetadataCheckAnalyzer"
 ) {
   static readonly layer: Layer.Layer<TaskMetadataCheckAnalyzer> = Layer.succeed(
     TaskMetadataCheckAnalyzer,

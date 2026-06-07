@@ -1,30 +1,24 @@
 {
-  "name": "@kb/cli",
+  "name": "@kb/vault-checks",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "bin": {
-    "kb": "./src/cli.ts"
+  "exports": {
+    ".": "./src/index.ts"
   },
   "scripts": {
-    "kb": "tsx src/cli.ts",
-    "build": "node build.mjs",
-    "kb:bundled": "node dist/cli.cjs",
-    "test": "vitest run --passWithNoTests",
+    "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@effect/platform-node": "beta",
-    "@kb/dataview": "workspace:*",
-    "@kb/vault-checks": "workspace:*",
+    "@kb/markdown-ast": "workspace:*",
     "@kb/vault-core": "workspace:*",
     "@kb/vault-tasks": "workspace:*",
     "effect": "beta"
   },
   "devDependencies": {
+    "@effect/vitest": "beta",
     "@types/node": "^24.10.1",
-    "esbuild": "^0.28.0",
-    "tsx": "^4.20.6",
     "typescript": "^5.9.3",
     "vitest": "^4.0.13"
   }

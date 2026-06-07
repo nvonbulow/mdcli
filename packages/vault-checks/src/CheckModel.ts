@@ -1,7 +1,8 @@
 import { Chunk, Context, Data } from "effect"
-import type { SourcePosition } from "./markdown/MarkdownModel"
-import type { VaultShape } from "./Vault"
-import type { VaultScope } from "./VaultScope"
+import type { VaultScope, VaultShape } from "@kb/vault-core"
+import type * as VaultCore from "@kb/vault-core"
+
+type SourcePosition = VaultCore.MarkdownModel.SourcePosition
 
 export type CheckSeverity = "error" | "warning"
 
@@ -42,4 +43,4 @@ export type CheckContextShape = {
   readonly indexes: CheckIndexes
 }
 
-export class CheckContext extends Context.Service<CheckContext, CheckContextShape>()("@kb/vault-core/CheckContext") {}
+export class CheckContext extends Context.Service<CheckContext, CheckContextShape>()("@kb/vault-checks/CheckContext") {}

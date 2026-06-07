@@ -1,7 +1,7 @@
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem"
 import * as NodePath from "@effect/platform-node/NodePath"
 import { assert, describe, it } from "vitest"
-import { Glob } from "@kb/vault"
+import { Glob } from "@kb/vault-core"
 import { Effect, FileSystem, Layer, Option, Path } from "effect"
 import { KbConfigError, resolveVaultRoot } from "../src/KbConfig"
 

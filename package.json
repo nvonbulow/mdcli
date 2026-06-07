@@ -5,7 +5,7 @@
   "packageManager": "aube@1.14.1",
   "scripts": {
     "kb": "aube --filter @kb/cli run kb",
-    "test": "aube --filter @kb/markdown-ast --filter @kb/vault --filter @kb/dataview run test",
+    "test": "aube --filter @kb/markdown-ast --filter @kb/vault-core --filter @kb/dataview run test",
     "typecheck": "aube --recursive run typecheck"
   },
   "devDependencies": {

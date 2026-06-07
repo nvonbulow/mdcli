@@ -31,7 +31,7 @@ export type CheckServiceShape = {
 }
 type ScopedVaultForScope = (scope: VaultScope) => Effect.Effect<VaultShape, CheckServiceError>
 
-export class CheckService extends Context.Service<CheckService, CheckServiceShape>()("@kb/vault/CheckService") {
+export class CheckService extends Context.Service<CheckService, CheckServiceShape>()("@kb/vault-core/CheckService") {
   static readonly layerNoDeps: Layer.Layer<CheckService, never, VaultService> = Layer.effect(
     CheckService,
     Effect.gen(function* () {

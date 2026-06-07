@@ -7,7 +7,7 @@ import {
   TaskSource,
   type IsoDate,
   type VaultScope
-} from "@kb/vault"
+} from "@kb/vault-core"
 import { Chunk, Effect, Layer, Option, Trie } from "effect"
 import {
   DataviewEvaluator,

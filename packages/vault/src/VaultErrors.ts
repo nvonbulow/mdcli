@@ -3,13 +3,13 @@ import type { MarkdownParseError, MarkdownStringifyError } from "@kb/markdown-as
 import { DashboardName } from "./DashboardModel"
 import { TaskSource } from "./TaskModel"
 
-export class VaultIoError extends Schema.TaggedErrorClass<VaultIoError>("@kb/vault/VaultIoError")("VaultIoError", {
+export class VaultIoError extends Schema.TaggedErrorClass<VaultIoError>("@kb/vault-core/VaultIoError")("VaultIoError", {
   operation: Schema.String,
   path: Schema.optionalKey(Schema.String),
   message: Schema.String
 }) {}
 
-export class TaskParseError extends Schema.TaggedErrorClass<TaskParseError>("@kb/vault/TaskParseError")(
+export class TaskParseError extends Schema.TaggedErrorClass<TaskParseError>("@kb/vault-core/TaskParseError")(
   "TaskParseError",
   {
     message: Schema.String,
@@ -21,7 +21,7 @@ export class TaskParseError extends Schema.TaggedErrorClass<TaskParseError>("@kb
 export { MarkdownParseError, MarkdownStringifyError } from "@kb/markdown-ast"
 
 export class DashboardRenderError extends Schema.TaggedErrorClass<DashboardRenderError>(
-  "@kb/vault/DashboardRenderError"
+  "@kb/vault-core/DashboardRenderError"
 )("DashboardRenderError", {
   message: Schema.String,
   name: Schema.optionalKey(DashboardName)

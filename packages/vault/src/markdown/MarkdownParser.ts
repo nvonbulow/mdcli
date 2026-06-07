@@ -9,7 +9,7 @@ export type MarkdownParserService = {
 }
 
 export class MarkdownParser extends Context.Service<MarkdownParser, MarkdownParserService>()(
-  "@kb/vault/markdown/MarkdownParser"
+  "@kb/vault-core/markdown/MarkdownParser"
 ) {
   static readonly layerNoDeps: Layer.Layer<MarkdownParser, never, MarkdownProcessor> = Layer.effect(
     this,

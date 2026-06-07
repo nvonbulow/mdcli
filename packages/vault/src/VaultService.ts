@@ -51,7 +51,7 @@ export type VaultServiceShape = {
   readonly scoped: (scope: VaultScope) => Effect.Effect<VaultShape, VaultIoError>
 }
 
-export class VaultService extends Context.Service<VaultService, VaultServiceShape>()("@kb/vault/VaultService") {
+export class VaultService extends Context.Service<VaultService, VaultServiceShape>()("@kb/vault-core/VaultService") {
   static makeLayer({ root }: { readonly root: string }) {
     return Layer.effect(VaultService, makeVaultService(root)).pipe(
       Layer.provide(Layer.mergeAll(MarkdownParser.layer, MarkdownProcessor.layer))

@@ -42,4 +42,4 @@ export type CheckContextShape = {
   readonly indexes: CheckIndexes
 }
 
-export class CheckContext extends Context.Service<CheckContext, CheckContextShape>()("@kb/vault/CheckContext") {}
+export class CheckContext extends Context.Service<CheckContext, CheckContextShape>()("@kb/vault-core/CheckContext") {}

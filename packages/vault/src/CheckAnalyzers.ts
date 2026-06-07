@@ -287,7 +287,7 @@ const taskMetadata = Effect.fn("TaskMetadataCheckAnalyzer.analyzeFile")(function
 })
 
 export class VaultDiagnosticsCheckAnalyzer extends Context.Service<VaultDiagnosticsCheckAnalyzer, CheckAnalyzer>()(
-  "@kb/vault/VaultDiagnosticsCheckAnalyzer"
+  "@kb/vault-core/VaultDiagnosticsCheckAnalyzer"
 ) {
   static readonly layer: Layer.Layer<VaultDiagnosticsCheckAnalyzer> = Layer.succeed(
     VaultDiagnosticsCheckAnalyzer,
@@ -296,7 +296,7 @@ export class VaultDiagnosticsCheckAnalyzer extends Context.Service<VaultDiagnost
 }
 
 export class LinkIntegrityCheckAnalyzer extends Context.Service<LinkIntegrityCheckAnalyzer, CheckAnalyzer>()(
-  "@kb/vault/LinkIntegrityCheckAnalyzer"
+  "@kb/vault-core/LinkIntegrityCheckAnalyzer"
 ) {
   static readonly layer: Layer.Layer<LinkIntegrityCheckAnalyzer> = Layer.succeed(
     LinkIntegrityCheckAnalyzer,
@@ -305,7 +305,7 @@ export class LinkIntegrityCheckAnalyzer extends Context.Service<LinkIntegrityChe
 }
 
 export class DuplicateHeadingCheckAnalyzer extends Context.Service<DuplicateHeadingCheckAnalyzer, CheckAnalyzer>()(
-  "@kb/vault/DuplicateHeadingCheckAnalyzer"
+  "@kb/vault-core/DuplicateHeadingCheckAnalyzer"
 ) {
   static readonly layer: Layer.Layer<DuplicateHeadingCheckAnalyzer> = Layer.succeed(
     DuplicateHeadingCheckAnalyzer,
@@ -314,7 +314,7 @@ export class DuplicateHeadingCheckAnalyzer extends Context.Service<DuplicateHead
 }
 
 export class TitleDriftCheckAnalyzer extends Context.Service<TitleDriftCheckAnalyzer, CheckAnalyzer>()(
-  "@kb/vault/TitleDriftCheckAnalyzer"
+  "@kb/vault-core/TitleDriftCheckAnalyzer"
 ) {
   static readonly layer: Layer.Layer<TitleDriftCheckAnalyzer> = Layer.succeed(
     TitleDriftCheckAnalyzer,
@@ -323,7 +323,7 @@ export class TitleDriftCheckAnalyzer extends Context.Service<TitleDriftCheckAnal
 }
 
 export class ArchiveHeadingCheckAnalyzer extends Context.Service<ArchiveHeadingCheckAnalyzer, CheckAnalyzer>()(
-  "@kb/vault/ArchiveHeadingCheckAnalyzer"
+  "@kb/vault-core/ArchiveHeadingCheckAnalyzer"
 ) {
   static readonly layer: Layer.Layer<ArchiveHeadingCheckAnalyzer> = Layer.succeed(
     ArchiveHeadingCheckAnalyzer,
@@ -332,7 +332,7 @@ export class ArchiveHeadingCheckAnalyzer extends Context.Service<ArchiveHeadingC
 }
 
 export class DumpInboxCheckAnalyzer extends Context.Service<DumpInboxCheckAnalyzer, CheckAnalyzer>()(
-  "@kb/vault/DumpInboxCheckAnalyzer"
+  "@kb/vault-core/DumpInboxCheckAnalyzer"
 ) {
   static readonly layer: Layer.Layer<DumpInboxCheckAnalyzer, never, VaultService> = Layer.effect(
     DumpInboxCheckAnalyzer,
@@ -344,7 +344,7 @@ export class DumpInboxCheckAnalyzer extends Context.Service<DumpInboxCheckAnalyz
 }
 
 export class TaskMetadataCheckAnalyzer extends Context.Service<TaskMetadataCheckAnalyzer, CheckAnalyzer>()(
-  "@kb/vault/TaskMetadataCheckAnalyzer"
+  "@kb/vault-core/TaskMetadataCheckAnalyzer"
 ) {
   static readonly layer: Layer.Layer<TaskMetadataCheckAnalyzer> = Layer.succeed(
     TaskMetadataCheckAnalyzer,

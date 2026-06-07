@@ -119,7 +119,7 @@ export type VaultProjectionMethods = Pick<
   | "diagnostics"
 >
 
-export class Vault extends Context.Service<Vault, VaultShape>()("@kb/vault/Vault") {
+export class Vault extends Context.Service<Vault, VaultShape>()("@kb/vault-core/Vault") {
   static make({
     scope = allMarkdown,
     tree,

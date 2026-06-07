@@ -1,6 +1,6 @@
 import { DataviewRenderer, type OutputFormat } from "@kb/dataview"
 import { Chunk } from "effect"
-import { allMarkdown, fromPatterns, type VaultScope } from "@kb/vault"
+import { allMarkdown, fromPatterns, type VaultScope } from "@kb/vault-core"
 import type * as Layer from "effect/Layer"
 import { Flag } from "effect/unstable/cli"
 

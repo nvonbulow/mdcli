@@ -15,13 +15,13 @@ export const SourcePosition = Schema.Struct({
   end: SourcePoint
 })
 
-export class TaskSource extends Schema.Class<TaskSource>("@kb/vault/TaskSource")({
+export class TaskSource extends Schema.Class<TaskSource>("@kb/vault-core/TaskSource")({
   path: Schema.String,
   lineNumber: Schema.Number,
   position: Schema.optionalKey(SourcePosition)
 }) {}
 
-export class Task extends Schema.Class<Task>("@kb/vault/Task")({
+export class Task extends Schema.Class<Task>("@kb/vault-core/Task")({
   done: Schema.Boolean,
   text: Schema.String,
   fields: Schema.Record(Schema.String, Schema.String),
@@ -67,7 +67,7 @@ export class Task extends Schema.Class<Task>("@kb/vault/Task")({
   }
 }
 
-export class ParsedTask extends Schema.Class<ParsedTask>("@kb/vault/ParsedTask")({
+export class ParsedTask extends Schema.Class<ParsedTask>("@kb/vault-core/ParsedTask")({
   done: Schema.Boolean,
   text: Schema.String,
   source: TaskSource,
@@ -86,7 +86,7 @@ export class ParsedTask extends Schema.Class<ParsedTask>("@kb/vault/ParsedTask")
 export const TaskViewName = Schema.Literals(["today", "week", "open"])
 export type TaskViewName = typeof TaskViewName.Type
 
-export class WeekWindow extends Schema.Class<WeekWindow>("@kb/vault/WeekWindow")({
+export class WeekWindow extends Schema.Class<WeekWindow>("@kb/vault-core/WeekWindow")({
   start: IsoDate,
   end: IsoDate
 }) {}

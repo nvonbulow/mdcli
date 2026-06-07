@@ -11,7 +11,7 @@ export type CalendarServiceShape = {
 }
 
 export class CalendarService extends Context.Service<CalendarService, CalendarServiceShape>()(
-  "@kb/vault/CalendarService"
+  "@kb/vault-core/CalendarService"
 ) {
   static readonly layerLive: Layer.Layer<CalendarService> = Layer.effect(
     CalendarService,
@@ -59,11 +59,11 @@ const addDays = (date: IsoDate, days: number): IsoDate => {
 function makeCalendarService(today: Effect.Effect<IsoDate>): Effect.Effect<CalendarServiceShape> {
   return Effect.sync(() =>
     CalendarService.of({
-      today: Effect.fn("@kb/vault/CalendarService.today")(() => today),
-      addDays: Effect.fn("@kb/vault/CalendarService.addDays")((date: IsoDate, days: number) =>
+      today: Effect.fn("@kb/vault-core/CalendarService.today")(() => today),
+      addDays: Effect.fn("@kb/vault-core/CalendarService.addDays")((date: IsoDate, days: number) =>
         Effect.succeed(addDays(date, days))
       ),
-      window: Effect.fn("@kb/vault/CalendarService.window")((start: IsoDate, days: number) =>
+      window: Effect.fn("@kb/vault-core/CalendarService.window")((start: IsoDate, days: number) =>
         Effect.succeed(makeWindow(start, days))
       )
     })

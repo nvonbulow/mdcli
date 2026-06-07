@@ -1,4 +1,4 @@
-import { allMarkdown, VaultService } from "@kb/vault"
+import { allMarkdown, VaultService } from "@kb/vault-core"
 import { Config, ConfigProvider, Data, Effect, FileSystem, Layer, Option, Path, Schema, Trie } from "effect"
 import { Primitive } from "effect/unstable/cli"
 

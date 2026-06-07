@@ -217,7 +217,7 @@ importers:
       '@kb/dataview':
         specifier: workspace:*
         version: 0.1.0
-      '@kb/vault':
+      '@kb/vault-core':
         specifier: workspace:*
         version: 0.1.0
       effect:
@@ -300,7 +300,7 @@ importers:
 
   packages/dataview:
     dependencies:
-      '@kb/vault':
+      '@kb/vault-core':
         specifier: workspace:*
         version: 0.1.0
       effect:

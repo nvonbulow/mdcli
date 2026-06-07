@@ -12,7 +12,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@kb/vault": "workspace:*",
+    "@kb/vault-core": "workspace:*",
     "effect": "beta"
   },
   "devDependencies": {

@@ -13,7 +13,7 @@ export type Glob = {
   ) => Effect.Effect<Array<string>, GlobError>
 }
 
-export const Glob: Context.Service<Glob, Glob> = Context.Service("@kb/vault/Glob")
+export const Glob: Context.Service<Glob, Glob> = Context.Service("@kb/vault-core/Glob")
 
 export const layer: Layer.Layer<Glob> = Layer.succeed(Glob, {
   glob: (pattern, options) =>

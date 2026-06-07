@@ -337,9 +337,6 @@ importers:
       '@kb/dataview':
         specifier: workspace:*
         version: 0.1.0
-      '@kb/dataview-vault':
-        specifier: workspace:*
-        version: 0.1.0
       '@kb/markdown-ast':
         specifier: workspace:*
         version: 0.0.0

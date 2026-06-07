@@ -1,7 +1,7 @@
 #!/usr/bin/env -S tsx
 import { NodeRuntime, NodeServices } from "@effect/platform-node"
 import { DataviewEvaluator, DataviewFunctionRegistry, DataviewParser, DataviewProgram } from "@kb/dataview"
-import { MarkdownDataviewRenderer, MarkdownFenceParser } from "@kb/dataview-markdown"
+import { MarkdownDataviewRenderer } from "@kb/dataview-markdown"
 import { DataviewVaultRecordSource } from "@kb/dataview-vault"
 import { CheckService } from "@kb/vault-checks"
 import { Glob } from "@kb/vault-core"
@@ -24,7 +24,6 @@ const KbCommand = KbRoot.pipe(
   Command.provide(DataviewVaultRecordSource.layerNoDeps),
   Command.provide(DataviewEvaluator.layerNoDeps),
   Command.provide(DataviewFunctionRegistry.layerNoDeps),
-  Command.provide(MarkdownFenceParser.layerNoDeps),
   Command.provide(CalendarService.layerLive),
   Command.provide(CheckService.layer),
   Command.provide((flags) => vaultServiceLayerFromFlags(flags.vault)),

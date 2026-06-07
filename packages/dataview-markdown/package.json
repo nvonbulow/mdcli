@@ -13,7 +13,6 @@
   },
   "dependencies": {
     "@kb/dataview": "workspace:*",
-    "@kb/dataview-vault": "workspace:*",
     "@kb/markdown-ast": "workspace:*",
     "effect": "beta"
   },

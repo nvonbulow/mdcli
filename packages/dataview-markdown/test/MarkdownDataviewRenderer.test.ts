@@ -2,12 +2,13 @@ import { assert, describe, it } from "@effect/vitest"
 import {
   DataviewColumn,
   DataviewMetadata,
+  DataviewParseError,
   DataviewProgram,
   DataviewRecord,
-  DataviewRenderer,
   DataviewResult,
   DataviewRow
 } from "@kb/dataview"
+import { MarkdownProcessor } from "@kb/markdown-ast"
 import { Effect, Layer } from "effect"
 import { MarkdownDataviewRenderer, MarkdownFenceParser } from "../src"
 
@@ -28,15 +29,14 @@ const dataviewProgramLayer = Layer.succeed(
   DataviewProgram.of({
     run: (queryText: string) =>
       Effect.gen(function* () {
-        assert.strictEqual(queryText, "TASK\n")
+        assert.strictEqual(queryText, "TASK")
         return queryResult
       })
   })
 )
 
-const markdownDocumentLayer = MarkdownDataviewRenderer.layerNoDeps.pipe(
-  Layer.provide(Layer.mergeAll(MarkdownFenceParser.layerNoDeps, DataviewRenderer.layerMarkdown, dataviewProgramLayer))
-)
+const makeMarkdownDocumentLayer = (programLayer: Layer.Layer<DataviewProgram>) =>
+  MarkdownDataviewRenderer.layerNoDeps.pipe(Layer.provide(Layer.mergeAll(MarkdownProcessor.layer, programLayer)))
 
 describe("MarkdownFenceParser", () => {
   it.effect("splits dataview fences while preserving surrounding markdown and other fences", () =>
@@ -67,12 +67,47 @@ describe("MarkdownFenceParser", () => {
 })
 
 describe("MarkdownDataviewRenderer", () => {
-  it.effect("renders dataview fences through the dataview program and preserves markdown", () =>
+  it.effect("replaces dataview fences with markdown tables and preserves surrounding markdown", () =>
     Effect.gen(function* () {
       const renderer = yield* MarkdownDataviewRenderer
-      const rendered = yield* renderer.renderDocument("# Dashboard\n\n```dataview\nTASK\n```\nTail")
+      const rendered = yield* renderer.renderDocument(
+        "# Dashboard\n\n```js\nconst value = 1\n```\n\n```dataview\nTASK\n```\n\nTail"
+      )
 
-      assert.strictEqual(rendered, "# Dashboard\n\n| Task |\n| --- |\n| A \\| B |\nTail")
-    }).pipe(Effect.provide(markdownDocumentLayer))
+      assert.match(rendered, /^# Dashboard/m)
+      assert.match(rendered, /```js\nconst value = 1\n```/)
+      assert.match(rendered, /\| Task\s*\|/)
+      assert.match(rendered, /\|\s*-{3,}\s*\|/)
+      assert.match(rendered, /\| A \\\| B\s*\|/)
+      assert.match(rendered, /Tail/)
+      assert.ok(!rendered.includes("```dataview"))
+      assert.ok(!rendered.includes("TASK\n```"))
+    }).pipe(Effect.provide(makeMarkdownDocumentLayer(dataviewProgramLayer)))
+  )
+
+  it.effect("propagates dataview program errors", () =>
+    Effect.gen(function* () {
+      const renderer = yield* MarkdownDataviewRenderer
+      const error = yield* Effect.flip(renderer.renderDocument("```dataview\nBROKEN\n```"))
+
+      assert.strictEqual(error._tag, "ParseError")
+      if (error._tag === "ParseError") {
+        assert.strictEqual(error.message, "Invalid query")
+        assert.strictEqual(error.input, "BROKEN")
+        assert.strictEqual(error.line, 1)
+      }
+    }).pipe(
+      Effect.provide(
+        makeMarkdownDocumentLayer(
+          Layer.succeed(
+            DataviewProgram,
+            DataviewProgram.of({
+              run: (queryText: string) =>
+                Effect.fail(new DataviewParseError({ input: queryText, message: "Invalid query", line: 1 }))
+            })
+          )
+        )
+      )
+    )
   )
 })

@@ -1,10 +1,9 @@
 {
-  "name": "@kb/dataview",
+  "name": "@kb/vault-tasks",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "exports": {
-    "./package.json": "./package.json",
     ".": "./src/index.ts"
   },
   "scripts": {
@@ -12,8 +11,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@kb/markdown-ast": "workspace:*",
     "@kb/vault-core": "workspace:*",
-    "@kb/vault-tasks": "workspace:*",
     "effect": "beta"
   },
   "devDependencies": {

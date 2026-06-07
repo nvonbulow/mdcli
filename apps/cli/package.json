@@ -17,6 +17,7 @@
     "@effect/platform-node": "beta",
     "@kb/dataview": "workspace:*",
     "@kb/vault-core": "workspace:*",
+    "@kb/vault-tasks": "workspace:*",
     "effect": "beta"
   },
   "devDependencies": {

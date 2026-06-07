@@ -1,4 +1,4 @@
-import { CalendarService, type IsoDate } from "@kb/vault-core"
+import { CalendarService, type IsoDate } from "@kb/vault-tasks"
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"

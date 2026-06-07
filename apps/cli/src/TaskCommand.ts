@@ -1,7 +1,7 @@
 import { Console, Effect } from "effect"
 import { Command, Flag } from "effect/unstable/cli"
 import { DataviewProgram, DataviewRenderer } from "@kb/dataview"
-import { CalendarService, type IsoDate } from "@kb/vault-core"
+import { CalendarService, type IsoDate } from "@kb/vault-tasks"
 import { resolveDateInput } from "./DateInput"
 import { dataviewSourcesFromFlags, scopeFlags } from "./OutputFormat"
 

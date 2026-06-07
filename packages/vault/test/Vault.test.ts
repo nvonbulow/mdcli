@@ -108,7 +108,7 @@ describe("Vault", () => {
       const headings = toArray(yield* vault.headings())
       const links = toArray(yield* vault.links())
       const tags = toArray(yield* vault.tags())
-      const tasks = toArray(yield* vault.tasks())
+      const listItems = toArray(yield* vault.listItems())
       const fencedBlocks = toArray(yield* vault.fencedBlocks())
       const finance = toArray(yield* vault.search(fromPath("Notes"), "finance"))
 
@@ -144,8 +144,8 @@ describe("Vault", () => {
         ]
       )
       assert.deepStrictEqual(
-        tasks.map((task) => [task.path, task.text, task.task.project, task.task.area]),
-        [["Notes/Search.md", "Follow Ledger", "Finance", "[[Work]]"]]
+        listItems.map((item) => [item.path, item.text, item.checked]),
+        [["Notes/Search.md", "Follow Ledger #task Finance Work", false]]
       )
       assert.deepStrictEqual(
         fencedBlocks.map((block) => [block.path, block.language, block.value]),
@@ -204,7 +204,7 @@ describe("Vault", () => {
   it.effect("reuses cached projection inputs across repeated scoped facades", () => {
     const state: TestFileSystemState = {
       files: {
-        [`${testRoot}/Notes/Tasks.md`]: "# Tasks\n- [ ] Keep cached #task"
+        [`${testRoot}/Notes/List.md`]: "# List\n- [ ] Keep cached #item"
       },
       writes: 0,
       reads: 0
@@ -213,19 +213,19 @@ describe("Vault", () => {
     return Effect.gen(function* () {
       const vaultService = yield* VaultService
       const firstVault = yield* vaultService.scoped(fromPath("Notes"))
-      const firstTasks = toArray(yield* firstVault.tasks())
+      const firstListItems = toArray(yield* firstVault.listItems())
       const readsAfterFirstProjection = state.reads
 
       const secondVault = yield* vaultService.scoped(fromPath("Notes"))
-      const secondTasks = toArray(yield* secondVault.tasks())
+      const secondListItems = toArray(yield* secondVault.listItems())
 
       assert.deepStrictEqual(
-        firstTasks.map((task) => [task.path, task.text]),
-        [["Notes/Tasks.md", "Keep cached"]]
+        firstListItems.map((item) => [item.path, item.text]),
+        [["Notes/List.md", "Keep cached #item"]]
       )
       assert.deepStrictEqual(
-        secondTasks.map((task) => [task.path, task.text]),
-        [["Notes/Tasks.md", "Keep cached"]]
+        secondListItems.map((item) => [item.path, item.text]),
+        [["Notes/List.md", "Keep cached #item"]]
       )
       assert.strictEqual(readsAfterFirstProjection, 2)
       assert.strictEqual(state.reads, readsAfterFirstProjection)

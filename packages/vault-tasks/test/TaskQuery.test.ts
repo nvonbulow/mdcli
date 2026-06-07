@@ -1,6 +1,7 @@
 import { assert, describe, it } from "@effect/vitest"
 import { Effect } from "effect"
-import { CalendarService } from "../src/CalendarService"
+import { CalendarService } from "../src/index"
+
 describe("CalendarService", () => {
   it.effect("returns the injected test date", () =>
     Effect.gen(function* () {

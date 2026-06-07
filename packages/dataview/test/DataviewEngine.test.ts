@@ -1,14 +1,7 @@
 import { assert, describe, it } from "@effect/vitest"
-import {
-  CalendarService,
-  VaultService,
-  MarkdownModel,
-  ParsedTask,
-  TaskSource,
-  type IsoDate,
-  type VaultScope
-} from "@kb/vault-core"
-import { Chunk, Effect, Layer, Option, Trie } from "effect"
+import { MarkdownModel, VaultService, type MarkdownParseError, type VaultScope } from "@kb/vault-core"
+import { CalendarService, ParsedTask, TaskSource, type IsoDate } from "@kb/vault-tasks"
+import { Chunk, Effect, Layer, Option, Result, Trie } from "effect"
 import {
   DataviewEvaluator,
   DataviewExpression,
@@ -41,23 +34,68 @@ const record = (
 
 const parserEvaluatorLayer = Layer.mergeAll(DataviewParser.layerNoDeps, DataviewEvaluator.layerNoDeps)
 
-const vaultTaskRecord = (task: ParsedTask) => ({
-  path: task.source.path,
-  file: new MarkdownModel.MarkdownFile({ path: task.source.path, contents: "", mdast: { _tag: "Root", type: "root", children: [] } }),
-  node: {
-    _tag: "ListItemNode",
-    type: "listItem",
-    children: [],
-    checked: task.done ? Option.some(true) : Option.some(false),
-    spread: Option.none()
-  } as never,
-  task,
-  done: task.done,
-  text: task.text,
-  fields: task.fields,
-  unknownFields: task.unknownFields,
-  tags: Chunk.fromIterable(task.tags)
+const position = (line: number) => ({
+  start: { line, column: 1, offset: 0 },
+  end: { line, column: 1, offset: 0 }
 })
+
+const textNode = (value: string, line: number) => ({
+  _tag: "TextNode",
+  type: "text",
+  value,
+  position: position(line)
+})
+
+const inlineFieldNode = (key: string, value: string, line: number) => ({
+  _tag: "InlineDataFieldNode",
+  type: "inlineDataField",
+  delimiter: "square",
+  original: `[${key}:: ${value}]`,
+  position: position(line),
+  children: [
+    { _tag: "InlineDataFieldKeyNode", type: "inlineDataFieldKey", children: [textNode(key, line)] },
+    { _tag: "InlineDataFieldValueNode", type: "inlineDataFieldValue", children: [textNode(value, line)] }
+  ]
+})
+
+const markdownFileForTask = (task: ParsedTask): MarkdownModel.MarkdownFile =>
+  new MarkdownModel.MarkdownFile({
+    path: task.source.path,
+    contents: "",
+    mdast: {
+      _tag: "Root",
+      type: "root",
+      children: [
+        {
+          _tag: "ListNode",
+          type: "list",
+          ordered: Option.none(),
+          start: Option.none(),
+          spread: Option.none(),
+          children: [
+            {
+              _tag: "ListItemNode",
+              type: "listItem",
+              checked: task.done ? Option.some(true) : Option.some(false),
+              spread: Option.none(),
+              position: position(task.source.lineNumber),
+              children: [
+                {
+                  _tag: "ParagraphNode",
+                  type: "paragraph",
+                  position: position(task.source.lineNumber),
+                  children: [
+                    textNode(`${task.text} #task `, task.source.lineNumber),
+                    ...Object.entries(task.fields).map(([key, value]) => inlineFieldNode(key, value, task.source.lineNumber))
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    } as never
+  })
 
 const scopeKey = (scope: VaultScope): string => {
   const pattern = Chunk.toReadonlyArray(scope.patterns)[0] ?? ""
@@ -71,24 +109,20 @@ const vaultLayer = (tasksBySource: Readonly<Record<string, ReadonlyArray<ParsedT
       readText: () => Effect.succeed(""),
       writeText: () => Effect.void,
       readMarkdown: () => Effect.die(new Error("readMarkdown should not be used by dataview tests")),
-      readMarkdownTree: () => Effect.die(new Error("readMarkdownTree should not be used by dataview tests")),
-      scoped: (scope) =>
+      readMarkdownTree: (scope) =>
         Effect.succeed({
-          scope,
-          tree: { root: "", files: Trie.empty() },
-          notes: () => Effect.succeed(Chunk.empty()),
-          frontmatter: () => Effect.succeed(Chunk.empty()),
-          headings: () => Effect.succeed(Chunk.empty()),
-          links: () => Effect.succeed(Chunk.empty()),
-          tags: () => Effect.succeed(Chunk.empty()),
-          listItems: () => Effect.succeed(Chunk.empty()),
-          tasks: () => Effect.succeed(Chunk.fromIterable((tasksBySource[scopeKey(scope)] ?? []).map(vaultTaskRecord))),
-          fencedBlocks: () => Effect.succeed(Chunk.empty()),
-          diagnostics: () => Effect.succeed(Chunk.empty()),
-          search: () => Effect.succeed(Chunk.empty()),
-          sourceLine: () => undefined,
-          sourceExcerpt: () => undefined
-        })
+          root: "",
+          files: Trie.fromIterable<Result.Result<MarkdownModel.MarkdownFile, MarkdownParseError>>(
+            (tasksBySource[scopeKey(scope)] ?? []).map(
+              (task) =>
+                [
+                  task.source.path,
+                  Result.succeed(markdownFileForTask(task)) as Result.Result<MarkdownModel.MarkdownFile, MarkdownParseError>
+                ] as const
+            )
+          )
+        }),
+      scoped: () => Effect.die(new Error("scoped should not be used by dataview tests"))
     })
   )
 
@@ -297,13 +331,13 @@ FROM "Inbox"`)
       )
       assert.deepStrictEqual(
         records.map((item) => item.fields["file.path"]),
-        ["Inbox.md"]
+        ["Inbox/Task.md"]
       )
     }).pipe(
       Effect.provide(Layer.mergeAll(DataviewParser.layerNoDeps, DataviewRecordSource.layerNoDeps)),
       Effect.provide(
         vaultLayer({
-          Inbox: [parsed("inbox task", 4, { source: source(4, "Inbox.md") })],
+          Inbox: [parsed("inbox task", 4, { source: source(4, "Inbox/Task.md") })],
           Projects: [parsed("project task", 5, { source: source(5, "Projects.md") })]
         })
       )

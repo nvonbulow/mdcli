@@ -1,5 +1,5 @@
 import { Effect, Option } from "effect"
-import { CalendarService, type IsoDate } from "@kb/vault-core"
+import { CalendarService, type IsoDate } from "@kb/vault-tasks"
 
 const relativeDatePattern = /^([+-])(\d+)d$/
 const acceptedDateSyntax = "YYYY-MM-DD, today, tomorrow, yesterday, +Nd, or -Nd"

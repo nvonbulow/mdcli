@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@kb/markdown-ast": "workspace:*",
+    "@kb/vault-tasks": "workspace:*",
     "effect": "beta",
     "glob": "^13.0.6",
     "minimatch": "^10.2.5"

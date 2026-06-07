@@ -1,11 +1,8 @@
 import {
-  MarkdownProcessor,
   type CodeNode,
   type HeadingNode,
   type ListItemNode,
   type MarkdownParseError,
-  type MarkdownProcessorService,
-  type MarkdownStringifyError,
   type MarkdownTagNode,
   type WikilinkNode,
   type YamlFrontmatterNode
@@ -13,7 +10,7 @@ import {
 import { Chunk, Context, Effect, Option, Result, String as Str, Trie } from "effect"
 import { Markdown } from "./markdown/Markdown"
 import { MarkdownFile, type MarkdownTree, type SourcePosition } from "./markdown/MarkdownModel"
-import { ParsedTask, Task, TaskSource } from "./TaskModel"
+
 import type { VaultIoError } from "./VaultErrors"
 
 import { allMarkdown, VaultScope } from "./VaultScope"
@@ -58,15 +55,6 @@ export type VaultListItemRecord = VaultRecord<ListItemNode> & {
   readonly checked?: boolean
 }
 
-export type VaultTaskRecord = VaultRecord<ListItemNode> & {
-  readonly task: ParsedTask
-  readonly done: boolean
-  readonly text: string
-  readonly fields: Readonly<Record<string, string>>
-  readonly unknownFields: Readonly<Record<string, string>>
-  readonly tags: Chunk.Chunk<string>
-}
-
 export type VaultFencedBlockRecord = VaultRecord<CodeNode> & {
   readonly value: string
   readonly language?: string
@@ -81,7 +69,6 @@ export type VaultDiagnostic = {
 
 export type VaultSearchResult =
   | { readonly _tag: "Note"; readonly path: string; readonly text: string; readonly record: VaultNoteRecord }
-  | { readonly _tag: "Task"; readonly path: string; readonly text: string; readonly record: VaultTaskRecord }
   | { readonly _tag: "Heading"; readonly path: string; readonly text: string; readonly record: VaultHeadingRecord }
   | { readonly _tag: "Link"; readonly path: string; readonly text: string; readonly record: VaultLinkRecord }
   | { readonly _tag: "Tag"; readonly path: string; readonly text: string; readonly record: VaultTagRecord }
@@ -95,13 +82,9 @@ export type VaultShape = {
   readonly links: (scope?: VaultScope) => Effect.Effect<Chunk.Chunk<VaultLinkRecord>, VaultIoError>
   readonly tags: (scope?: VaultScope) => Effect.Effect<Chunk.Chunk<VaultTagRecord>, VaultIoError>
   readonly listItems: (scope?: VaultScope) => Effect.Effect<Chunk.Chunk<VaultListItemRecord>, VaultIoError>
-  readonly tasks: (scope?: VaultScope) => Effect.Effect<Chunk.Chunk<VaultTaskRecord>, VaultIoError | MarkdownStringifyError>
   readonly fencedBlocks: (scope?: VaultScope) => Effect.Effect<Chunk.Chunk<VaultFencedBlockRecord>, VaultIoError>
   readonly diagnostics: (scope?: VaultScope) => Effect.Effect<Chunk.Chunk<VaultDiagnostic>, VaultIoError>
-  readonly search: (
-    scope: VaultScope,
-    query: string
-  ) => Effect.Effect<Chunk.Chunk<VaultSearchResult>, VaultIoError | MarkdownStringifyError>
+  readonly search: (scope: VaultScope, query: string) => Effect.Effect<Chunk.Chunk<VaultSearchResult>, VaultIoError>
   readonly sourceLine: (path: string, line: number) => string | undefined
   readonly sourceExcerpt: (path: string, position: SourcePosition | undefined) => string | undefined
 }
@@ -114,7 +97,6 @@ export type VaultProjectionMethods = Pick<
   | "links"
   | "tags"
   | "listItems"
-  | "tasks"
   | "fencedBlocks"
   | "diagnostics"
 >
@@ -128,7 +110,7 @@ export class Vault extends Context.Service<Vault, VaultShape>()("@kb/vault-core/
     readonly scope?: VaultScope
     readonly tree: MarkdownTree
     readonly projections?: VaultProjectionMethods
-  }): Effect.Effect<VaultShape, never, MarkdownProcessor> {
+  }): Effect.Effect<VaultShape> {
     return makeVault({ scope, tree, projections })
   }
 }
@@ -141,10 +123,9 @@ const makeVault = ({
   readonly scope: VaultScope
   readonly tree: MarkdownTree
   readonly projections?: VaultProjectionMethods | undefined
-}): Effect.Effect<VaultShape, never, MarkdownProcessor> =>
-  Effect.gen(function* () {
-    const processor = yield* MarkdownProcessor
-    const resolvedProjections = projections ?? projectionMethodsForTree(scope, tree, processor)
+}): Effect.Effect<VaultShape> =>
+  Effect.sync(() => {
+    const resolvedProjections = projections ?? projectionMethodsForTree(scope, tree)
     return Vault.of({
       scope,
       tree,
@@ -154,7 +135,6 @@ const makeVault = ({
       links: resolvedProjections.links,
       tags: resolvedProjections.tags,
       listItems: resolvedProjections.listItems,
-      tasks: resolvedProjections.tasks,
       fencedBlocks: resolvedProjections.fencedBlocks,
       diagnostics: resolvedProjections.diagnostics,
       search: (narrowScope, query) => searchVault(resolvedProjections, narrowScope, query),
@@ -163,11 +143,7 @@ const makeVault = ({
     })
   })
 
-const projectionMethodsForTree = (
-  scope: VaultScope,
-  tree: MarkdownTree,
-  processor: MarkdownProcessorService
-): VaultProjectionMethods => ({
+const projectionMethodsForTree = (scope: VaultScope, tree: MarkdownTree): VaultProjectionMethods => ({
   notes: (narrowScope?: VaultScope) => Effect.succeed(notesForScope(tree, narrowScope ?? scope)),
   frontmatter: (narrowScope?: VaultScope) =>
     Effect.succeed(recordsForScope(tree, narrowScope ?? scope, frontmatterRecordsForFile)),
@@ -179,10 +155,6 @@ const projectionMethodsForTree = (
     Effect.succeed(recordsForScope(tree, narrowScope ?? scope, tagRecordsForFile)),
   listItems: (narrowScope?: VaultScope) =>
     Effect.succeed(recordsForScope(tree, narrowScope ?? scope, listItemRecordsForFile)),
-  tasks: (narrowScope?: VaultScope) =>
-    recordsForScopeEffect(tree, narrowScope ?? scope, taskRecordsForFile).pipe(
-      Effect.provideService(MarkdownProcessor, processor)
-    ),
   fencedBlocks: (narrowScope?: VaultScope) =>
     Effect.succeed(recordsForScope(tree, narrowScope ?? scope, fencedBlockRecordsForFile)),
   diagnostics: (narrowScope?: VaultScope) => Effect.succeed(diagnosticsForScope(tree, narrowScope ?? scope))
@@ -201,21 +173,6 @@ const recordsForScope = <Record>(
   }
   return records
 }
-
-const recordsForScopeEffect = <Record, Error, Requirements>(
-  tree: MarkdownTree,
-  scope: VaultScope,
-  project: (path: string, file: MarkdownFile) => Effect.Effect<Chunk.Chunk<Record>, Error, Requirements>
-): Effect.Effect<Chunk.Chunk<Record>, Error, Requirements> =>
-  Effect.gen(function* () {
-    let records = Chunk.empty<Record>()
-    for (const [path, result] of Trie.entries(tree.files)) {
-      if (pathMatchesScope(path, scope) && Result.isSuccess(result)) {
-        records = Chunk.appendAll(records, yield* project(path, markdownFileAtPath(path, result.success)))
-      }
-    }
-    return records
-  })
 
 const notesForScope = (tree: MarkdownTree, scope: VaultScope): Chunk.Chunk<VaultNoteRecord> =>
   recordsForScope(tree, scope, noteRecordsForFile)
@@ -289,31 +246,6 @@ export const listItemRecordsForFile = (path: string, file: MarkdownFile): Chunk.
     ...optionalPosition(Markdown.position(node))
   }))
 
-export const taskRecordsForFile = (
-  path: string,
-  file: MarkdownFile
-): Effect.Effect<Chunk.Chunk<VaultTaskRecord>, MarkdownStringifyError, MarkdownProcessor> =>
-  Effect.gen(function* () {
-    let records = Chunk.empty<VaultTaskRecord>()
-    for (const node of Markdown.tasks(file)) {
-      const task = yield* parsedTaskFromNode(path, node)
-      if (Option.isSome(task)) {
-        records = Chunk.append(records, {
-          path,
-          file,
-          node,
-          task: task.value,
-          done: task.value.done,
-          text: task.value.text,
-          fields: task.value.fields,
-          unknownFields: task.value.unknownFields,
-          tags: Chunk.fromIterable(task.value.tags),
-          ...optionalPosition(Markdown.position(node))
-        })
-      }
-    }
-    return records
-  })
 
 export const fencedBlockRecordsForFile = (path: string, file: MarkdownFile): Chunk.Chunk<VaultFencedBlockRecord> =>
   Chunk.map(Markdown.fencedBlocks(file), (node) => ({
@@ -326,50 +258,20 @@ export const fencedBlockRecordsForFile = (path: string, file: MarkdownFile): Chu
     ...optionalPosition(Markdown.position(node))
   }))
 
-const parsedTaskFromNode = (
-  path: string,
-  node: ListItemNode
-): Effect.Effect<Option.Option<ParsedTask>, MarkdownStringifyError, MarkdownProcessor> =>
-  Effect.map(Task.from(node), (task) =>
-    Option.map(task, (task) => {
-      const position = Markdown.position(node)
-      return new ParsedTask({
-        done: task.done,
-        text: task.text,
-        source: new TaskSource({
-          path,
-          lineNumber: position?.start.line ?? 1,
-          ...optionalPosition(position)
-        }),
-        fields: task.fields,
-        unknownFields: task.unknownFields,
-        tags: task.tags,
-        ...optionalValue("scheduled", task.scheduled),
-        ...optionalValue("due", task.due),
-        ...optionalValue("completed", task.completed),
-        ...optionalValue("depends", task.depends),
-        ...optionalValue("repeat", task.repeat),
-        ...optionalValue("area", task.area),
-        ...optionalValue("project", task.project)
-      })
-    })
-  )
-
 const markdownFileAtPath = (path: string, file: MarkdownFile): MarkdownFile =>
   file.path === path ? file : new MarkdownFile({ path, contents: file.contents, mdast: file.mdast })
 
-type SearchSources = Pick<VaultProjectionMethods, "notes" | "tasks" | "headings" | "links" | "tags">
+type SearchSources = Pick<VaultProjectionMethods, "notes" | "headings" | "links" | "tags">
 
 const searchVault = (
   sources: SearchSources,
   scope: VaultScope,
   query: string
-): Effect.Effect<Chunk.Chunk<VaultSearchResult>, VaultIoError | MarkdownStringifyError> =>
+): Effect.Effect<Chunk.Chunk<VaultSearchResult>, VaultIoError> =>
   Effect.gen(function* () {
     const needle = Str.toLowerCase(query)
     const results: Array<VaultSearchResult> = []
     const notes = yield* sources.notes(scope)
-    const tasks = yield* sources.tasks(scope)
     const headings = yield* sources.headings(scope)
     const links = yield* sources.links(scope)
     const tags = yield* sources.tags(scope)
@@ -378,11 +280,6 @@ const searchVault = (
       const title = titleFromPath(note.path)
       if (matches(needle, note.path, title)) {
         results.push({ _tag: "Note", path: note.path, text: title, record: note })
-      }
-    }
-    for (const task of tasks) {
-      if (matches(needle, task.text)) {
-        results.push({ _tag: "Task", path: task.path, text: task.text, record: task })
       }
     }
     for (const heading of headings) {
@@ -494,12 +391,3 @@ const optionalString = <Key extends string>(key: Key, value: string | undefined)
   return { [key]: value } as Partial<Record<Key, string>>
 }
 
-const optionalValue = <Key extends string, Value>(
-  key: Key,
-  value: Value | undefined
-): { readonly [K in Key]?: Value } => {
-  if (value === undefined) {
-    return {}
-  }
-  return { [key]: value } as { readonly [K in Key]?: Value }
-}

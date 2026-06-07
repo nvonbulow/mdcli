@@ -1,4 +1,5 @@
 import { Chunk, Context, Effect, Layer, String as Str } from "effect"
+import { taskRecordsForTreeNoDeps } from "@kb/vault-tasks"
 import { CheckContext, CheckFinding } from "./CheckModel"
 import { VaultService, type VaultServiceShape } from "./VaultService"
 import type { CheckServiceError } from "./CheckService"
@@ -228,7 +229,7 @@ const taskMetadata = Effect.fn("TaskMetadataCheckAnalyzer.analyzeFile")(function
   const context = yield* CheckContext
   let findings = Chunk.empty<CheckFinding>()
 
-  const tasks = yield* context.vault.tasks(VaultScope.fromPath(path))
+  const tasks = yield* taskRecordsForTreeNoDeps(VaultScope.fromPath(path), context.vault.tree)
   for (const record of tasks) {
     for (const fieldName of dateFieldNames) {
       const value = record.fields[fieldName]

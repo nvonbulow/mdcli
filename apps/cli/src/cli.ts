@@ -9,7 +9,8 @@ import {
   MarkdownDataviewRenderer,
   MarkdownFenceParser
 } from "@kb/dataview"
-import { CalendarService, CheckService, Glob } from "@kb/vault-core"
+import { CheckService, Glob } from "@kb/vault-core"
+import { CalendarService } from "@kb/vault-tasks"
 import { Console, Effect } from "effect"
 import { Command } from "effect/unstable/cli"
 import { DashboardCommand } from "./DashboardCommand"

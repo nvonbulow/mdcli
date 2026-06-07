@@ -4,12 +4,11 @@ import {
   isGlobPattern,
   type MarkdownParseError,
   type MarkdownStringifyError,
-  type ParsedTask,
-  type TaskParseError,
   type VaultIoError,
   VaultService,
   type VaultScope
 } from "@kb/vault-core"
+import { type ParsedTask, taskRecordsForTreeNoDeps, type TaskParseError } from "@kb/vault-tasks"
 import * as Chunk from "effect/Chunk"
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
@@ -37,8 +36,8 @@ export class DataviewRecordSource extends Context.Service<DataviewRecordSource, 
         query: DataviewTaskQuery
       ) {
         const scope = yield* scopeFromQuery(query)
-        const vault = yield* vaultService.scoped(scope)
-        const tasks = yield* vault.tasks()
+        const tree = yield* vaultService.readMarkdownTree(scope)
+        const tasks = yield* taskRecordsForTreeNoDeps(scope, tree)
         return Chunk.toReadonlyArray(Chunk.map(tasks, (record) => taskRecord(record.task)))
       })
       return DataviewRecordSource.of({ recordsFor })

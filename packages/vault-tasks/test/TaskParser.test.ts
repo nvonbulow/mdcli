@@ -1,9 +1,8 @@
 import { assert, describe, it } from "@effect/vitest"
 import { MarkdownProcessor } from "@kb/markdown-ast"
+import { Markdown, MarkdownParser } from "@kb/vault-core"
 import { Chunk, Effect, Layer, Option } from "effect"
-import { Markdown } from "../src/markdown/Markdown"
-import { MarkdownParser } from "../src/markdown/MarkdownParser"
-import { Task } from "../src/TaskModel"
+import { Task } from "../src/index"
 
 const parserLayer = Layer.mergeAll(MarkdownParser.layer, MarkdownProcessor.layer)
 

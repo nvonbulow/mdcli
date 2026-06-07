@@ -1,6 +1,4 @@
 export * from "./DashboardModel"
-export * from "./TaskModel"
-export { CalendarService, type CalendarServiceShape } from "./CalendarService"
 export { Markdown } from "./markdown/Markdown"
 export * as MarkdownModel from "./markdown/MarkdownModel"
 export { MarkdownParser, type MarkdownParserService } from "./markdown/MarkdownParser"

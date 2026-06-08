@@ -11,13 +11,14 @@ import { Command } from "effect/unstable/cli"
 import { DashboardCommand } from "./DashboardCommand"
 import { CheckCommand } from "./CheckCommand"
 import { vaultServiceLayerFromFlags } from "./KbConfig"
+import { McpCommand } from "./McpCommand"
 import { rendererLayerForFormat } from "./OutputFormat"
 import { QueryCommand } from "./QueryCommand"
 import { KbRoot } from "./RootCommand"
 import { TaskCommand } from "./TaskCommand"
 
 const KbCommand = KbRoot.pipe(
-  Command.withSubcommands([TaskCommand, CheckCommand, DashboardCommand, QueryCommand]),
+  Command.withSubcommands([TaskCommand, CheckCommand, DashboardCommand, QueryCommand, McpCommand]),
   Command.provide(MarkdownDataviewRenderer.layerNoDeps),
   Command.provide(DataviewProgram.layerNoDeps),
   Command.provide(DataviewParser.layerNoDeps),

@@ -18,6 +18,7 @@
     "@kb/dataview": "workspace:*",
     "@kb/dataview-markdown": "workspace:*",
     "@kb/dataview-vault": "workspace:*",
+    "@kb/mcp-server": "workspace:*",
     "@kb/vault-checks": "workspace:*",
     "@kb/vault-core": "workspace:*",
     "@kb/vault-tasks": "workspace:*",

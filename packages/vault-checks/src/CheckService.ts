@@ -10,14 +10,11 @@ import {
   VaultDiagnosticsCheckAnalyzer
 } from "./CheckAnalyzers"
 import type { CheckAnalyzer } from "./CheckAnalyzers"
-import { VaultService, type VaultIoError, type VaultScope, type VaultShape } from "@kb/vault-core"
+import { VaultService, type VaultHeadingRecord, type VaultIoError, type VaultScope, type VaultShape } from "@kb/vault-core"
 import type * as VaultCore from "@kb/vault-core"
+import { isArchivePath, normalizeKey } from "./CheckAnalyzerUtils"
 import { CheckContext, CheckFinding, CheckReport } from "./CheckModel"
 import type { CheckContextShape, CheckIndexes } from "./CheckModel"
-
-type EffectSuccess<T> = T extends Effect.Effect<infer A, infer _E, infer _R> ? A : never
-type ChunkItem<T> = T extends Chunk.Chunk<infer A> ? A : never
-type VaultHeadingRecord = ChunkItem<EffectSuccess<ReturnType<VaultShape["headings"]>>>
 
 export type CheckServiceError = VaultIoError | VaultCore.Glob.GlobError | MarkdownStringifyError
 const serviceRegistry = new WeakMap<
@@ -269,12 +266,10 @@ const appendIndex = (index: Map<string, Chunk.Chunk<string>>, key: string, path:
 
 const sortIndex = (index: Map<string, Chunk.Chunk<string>>): ReadonlyMap<string, Chunk.Chunk<string>> => {
   const sorted = new Map<string, Chunk.Chunk<string>>()
-  for (const key of Array.from(index.keys()).sort(compareString)) {
+  for (const key of Array.from(index.keys()).sort(Str.Order)) {
     sorted.set(
       key,
-      Chunk.fromIterable(
-        Array.from(new Set(Chunk.toReadonlyArray(index.get(key) ?? Chunk.empty()))).sort(compareString)
-      )
+      Chunk.fromIterable(Array.from(new Set(Chunk.toReadonlyArray(index.get(key) ?? Chunk.empty()))).sort(Str.Order))
     )
   }
   return sorted
@@ -284,16 +279,15 @@ const sortFindings = (findings: Chunk.Chunk<CheckFinding>): Chunk.Chunk<CheckFin
   Chunk.fromIterable(Array.from(Chunk.toReadonlyArray(findings)).sort(compareFinding))
 
 const compareFinding = (left: CheckFinding, right: CheckFinding): number =>
-  compareString(left.path, right.path) ||
+  Str.Order(left.path, right.path) ||
   compareOptionalNumber(left.position?.start.line, right.position?.start.line) ||
-  compareString(left.category, right.category) ||
-  compareString(left.severity, right.severity) ||
-  compareString(left.message, right.message)
+  Str.Order(left.category, right.category) ||
+  Str.Order(left.severity, right.severity) ||
+  Str.Order(left.message, right.message)
 
 const compareOptionalNumber = (left: number | undefined, right: number | undefined): number =>
   left === right ? 0 : left === undefined ? 1 : right === undefined ? -1 : left - right
 
-const compareString = (left: string, right: string): number => (left < right ? -1 : left > right ? 1 : 0)
 
 const basename = (path: string): string => {
   const normalized = normalizePath(path)
@@ -303,7 +297,7 @@ const basename = (path: string): string => {
 
 const normalizePath = (path: string): string => {
   const normalized = Str.replaceAll("\\", "/")(path)
-  return normalized.startsWith("./") ? normalized.slice(2) : normalized
+  return Str.startsWith("./")(normalized) ? normalized.slice(2) : normalized
 }
 
 
@@ -312,14 +306,5 @@ const uniquePaths = (paths: Chunk.Chunk<string>): Chunk.Chunk<string> => {
   for (const path of paths) {
     selected.add(normalizePath(path))
   }
-  return Chunk.fromIterable(Array.from(selected).sort(compareString))
+  return Chunk.fromIterable(Array.from(selected).sort(Str.Order))
 }
-const normalizeKey = (value: string): string => {
-  const index = value.indexOf("#")
-  const withoutHeading = index < 0 ? value : value.slice(0, index)
-  const trimmed = withoutHeading.trim().toLowerCase()
-  return trimmed.endsWith(".md") ? trimmed.slice(0, -3) : trimmed
-}
-
-const isArchivePath = (path: string): boolean =>
-  path.split("/").some((part) => part === "90-Archive" || part === "Archive")

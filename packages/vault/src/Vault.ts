@@ -29,7 +29,7 @@ export type VaultNoteRecord = {
 }
 
 export type VaultFrontmatterRecord = VaultRecord<YamlFrontmatterNode> & {
-  readonly value: string
+  readonly value: unknown
   readonly language?: string
 }
 
@@ -197,8 +197,8 @@ const diagnosticsForScope = (tree: MarkdownTree, scope: VaultScope): Chunk.Chunk
 export const frontmatterRecordsForFile = (path: string, file: MarkdownFile): Chunk.Chunk<VaultFrontmatterRecord> =>
   Chunk.map(Markdown.frontmatter(file), (node) => ({
     ...sourceRecord(path, file, node),
-    value: frontmatterValue(file, node),
-    language: "yaml",
+    value: node.value,
+    language: "yaml"
   }))
 
 export const headingRecordsForFile = (path: string, file: MarkdownFile): Chunk.Chunk<VaultHeadingRecord> =>
@@ -339,14 +339,6 @@ const matches = (needle: string, ...values: ReadonlyArray<string | undefined>): 
   return false
 }
 
-const frontmatterValue = (file: MarkdownFile, node: YamlFrontmatterNode): string => {
-  const position = Markdown.position(node)
-  if (position === undefined) {
-    return typeof node.value === "string" ? node.value : ""
-  }
-  const lines = file.contents.split("\n")
-  return lines.slice(position.start.line, Math.max(position.start.line, position.end.line - 1)).join("\n")
-}
 
 const optionValue = <Value>(option: Option.Option<Value>): Value | undefined =>
   Option.isSome(option) ? option.value : undefined

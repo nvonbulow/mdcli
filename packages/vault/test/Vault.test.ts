@@ -118,7 +118,7 @@ describe("Vault", () => {
       )
       assert.deepStrictEqual(
         frontmatter.map((record) => [record.path, record.value]),
-        [["Notes/Search.md", "status: active"]]
+        [["Notes/Search.md", { status: "active" }]]
       )
       assert.deepStrictEqual(
         headings.map((heading) => [heading.path, heading.text]),

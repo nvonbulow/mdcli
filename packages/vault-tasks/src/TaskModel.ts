@@ -13,8 +13,27 @@ export class TaskParseError extends Schema.TaggedErrorClass<TaskParseError>("@kb
   }
 ) {}
 
-export const IsoDate = Schema.TemplateLiteral([Schema.Number, "-", Schema.Number, "-", Schema.Number])
+const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/
+const decodeDateTimeUtc = Schema.decodeUnknownOption(Schema.DateTimeUtcFromString)
+
+const isIsoDateString = (value: string): boolean => {
+  if (!isoDatePattern.test(value)) {
+    return false
+  }
+  return Option.match(decodeDateTimeUtc(value), {
+    onNone: () => false,
+    onSome: (dateTime) => DateTime.formatIsoDateUtc(dateTime) === value
+  })
+}
+
+export const IsoDate = Schema.String.pipe(
+  Schema.refine((value): value is string => isIsoDateString(value), {
+    identifier: "IsoDate",
+    expected: "valid YYYY-MM-DD date"
+  })
+)
 export type IsoDate = typeof IsoDate.Type
+export const isIsoDate = (value: string): value is IsoDate => isIsoDateString(value)
 
 export class Task extends Data.Class<{
   readonly done: boolean
@@ -72,8 +91,6 @@ export class WeekWindow extends Schema.Class<WeekWindow>("@kb/vault-tasks/WeekWi
 }) {}
 
 const taskTag = "#task"
-const taskTextTagPattern = /#[A-Za-z0-9/_-]+\b/g
-const taskTextCheckboxPattern = /^\s*[-*+]\s+\[[ xX]\]\s*/
 const knownFields: Record<string, true> = {
   scheduled: true,
   due: true,
@@ -131,11 +148,8 @@ const taskUnknownFields = (fields: Readonly<Record<string, string>>): Readonly<R
 }
 
 const taskText = (task: MarkdownAst.ListItemNode): string => {
-  const text = firstLine(listItemFirstParagraphText(task) ?? listItemTextWithoutNestedLists(task) ?? "").replace(
-    taskTextCheckboxPattern,
-    ""
-  )
-  return Str.trim(text.replace(taskTextTagPattern, "").replace(whitespacePattern, " "))
+  const text = firstLine(listItemFirstParagraphText(task) ?? nodeTextWithoutNestedLists(task))
+  return Str.trim(Str.replaceAll(whitespacePattern, " ")(text))
 }
 
 const listItemFirstParagraphText = (node: MarkdownAst.ListItemNode): string | undefined => {
@@ -147,7 +161,7 @@ const listItemFirstParagraphText = (node: MarkdownAst.ListItemNode): string | un
   return undefined
 }
 
-const listItemTextWithoutNestedLists = (node: MarkdownAst.ListItemNode): string | undefined => nodeTextWithoutNestedLists(node)
+
 
 const firstLine = (text: string): string => {
   const newline = text.indexOf("\n")
@@ -157,6 +171,9 @@ const firstLine = (text: string): string => {
 const nodeTextWithoutInlineFields = (node: MarkdownAst.AnyNode): string => {
   if (node._tag === "InlineDataFieldNode" || node._tag === "BlockAnchorNode") {
     return ""
+  }
+  if (node._tag === "TextNode") {
+    return textWithoutTags(node)
   }
   if (!("children" in node)) {
     return MarkdownAst.nodeText(node)
@@ -172,6 +189,9 @@ const nodeTextWithoutNestedLists = (node: MarkdownAst.AnyNode): string => {
   if (node._tag === "InlineDataFieldNode" || node._tag === "BlockAnchorNode" || node._tag === "ListNode") {
     return ""
   }
+  if (node._tag === "TextNode") {
+    return textWithoutTags(node)
+  }
   if (!("children" in node)) {
     return MarkdownAst.nodeText(node)
   }
@@ -182,6 +202,35 @@ const nodeTextWithoutNestedLists = (node: MarkdownAst.AnyNode): string => {
   return text
 }
 
+const textWithoutTags = (node: MarkdownAst.TextNode): string => {
+  let text = ""
+  let cursor = 0
+  for (const tag of MarkdownAst.tags(node)) {
+    const range = tagRangeInTextNode(node, tag)
+    if (range === undefined || range.start < cursor) {
+      continue
+    }
+    text = text + node.value.slice(cursor, range.start)
+    cursor = range.end
+  }
+  return text + node.value.slice(cursor)
+}
+
+const tagRangeInTextNode = (
+  node: MarkdownAst.TextNode,
+  tag: MarkdownAst.MarkdownTagNode
+): { readonly start: number; readonly end: number } | undefined => {
+  if (node.position?.start.offset !== undefined && tag.position?.start.offset !== undefined) {
+    const start = tag.position.start.offset - node.position.start.offset
+    return { start, end: start + tag.original.length }
+  }
+  if (node.position?.start.column !== undefined && tag.position?.start.column !== undefined) {
+    const start = tag.position.start.column - node.position.start.column
+    return { start, end: start + tag.original.length }
+  }
+  return undefined
+}
+
 const taskSourceLine = (task: MarkdownAst.ListItemNode): number | undefined => task.position?.start.line
 
 const sameSourceLine = (line: number | undefined, position: PositionLike | undefined): boolean =>
@@ -189,16 +238,6 @@ const sameSourceLine = (line: number | undefined, position: PositionLike | undef
 
 const checked = (task: MarkdownAst.ListItemNode): boolean => (Option.isSome(task.checked) ? task.checked.value : false)
 
-const isIsoDate = (value: string): value is IsoDate => {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return false
-  }
-
-  return Option.match(DateTime.make(value), {
-    onNone: () => false,
-    onSome: (dateTime) => DateTime.formatIsoDateUtc(dateTime) === value
-  })
-}
 
 const dateField = <Key extends "scheduled" | "due" | "completed">(
   key: Key,

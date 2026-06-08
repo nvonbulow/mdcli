@@ -4,5 +4,19 @@ export { MarkdownParser, type MarkdownParserService } from "./markdown/MarkdownP
 export * from "./VaultScope"
 export * as Glob from "./Glob"
 export { VaultService } from "./VaultService"
-export { Vault, type VaultProjectionMethods, type VaultRecord, type VaultShape } from "./Vault"
+export {
+  Vault,
+  type VaultDiagnostic,
+  type VaultFencedBlockRecord,
+  type VaultFrontmatterRecord,
+  type VaultHeadingRecord,
+  type VaultLinkRecord,
+  type VaultListItemRecord,
+  type VaultNoteRecord,
+  type VaultProjectionMethods,
+  type VaultRecord,
+  type VaultSearchResult,
+  type VaultShape,
+  type VaultTagRecord
+} from "./Vault"
 export * from "./VaultErrors"

@@ -182,9 +182,9 @@ const validateVaultRoot = Effect.fn("KbConfig.validateVaultRoot")(function* (
     )
   }
 
-  const tree = yield* Effect.gen(function* () {
+  const markdownFiles = yield* Effect.gen(function* () {
     const service = yield* VaultService
-    return yield* service.readMarkdownTree(allMarkdown)
+    return yield* service.readMarkdownFiles(allMarkdown)
   }).pipe(
     Effect.provide(VaultService.makeLayer({ root })),
     Effect.mapError(
@@ -197,7 +197,7 @@ const validateVaultRoot = Effect.fn("KbConfig.validateVaultRoot")(function* (
     )
   )
 
-  for (const _entry of Trie.entries(tree.files)) {
+  for (const _entry of Trie.entries(markdownFiles)) {
     return root
   }
 

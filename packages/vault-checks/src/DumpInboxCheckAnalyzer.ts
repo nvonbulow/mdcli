@@ -1,34 +1,31 @@
 import { Chunk, Context, Effect, Layer } from "effect"
 import type { AnyNode } from "@kb/markdown-ast"
-import { fromPath, Markdown } from "@kb/vault-core"
-import { CheckContext, CheckFinding } from "./CheckModel"
+import { Markdown, type MarkdownModel } from "@kb/vault-core"
+import { CheckFinding } from "./CheckModel"
 import type { CheckAnalyzer } from "./CheckAnalyzer"
 import { basename } from "./CheckAnalyzerUtils"
 
-const analyzeFile = Effect.fnUntraced(function* (path: string) {
+const analyzeFile = Effect.fnUntraced(function* (file: MarkdownModel.MarkdownFile) {
+  const path = file.path ?? ""
   if (basename(path) !== "dump.md") {
     return Chunk.empty<CheckFinding>()
   }
 
-  const context = yield* CheckContext
-  const notes = yield* context.vault.notes(fromPath(path))
-  for (const note of notes) {
-    for (const node of Markdown.root(note.file).children) {
-      if (isAllowedDumpTopLevelNode(node)) {
-        continue
-      }
-      return Chunk.of(
-        new CheckFinding({
-          category: "dump",
-          severity: "warning",
-          path,
-          position: Markdown.position(node),
-          message: "dump.md contains stranded non-heading content",
-          suggestedFix: "Move or archive stranded dump content.",
-          triggerPath: path
-        })
-      )
+  for (const node of Markdown.root(file).children) {
+    if (isAllowedDumpTopLevelNode(node)) {
+      continue
     }
+    return Chunk.of(
+      new CheckFinding({
+        category: "dump",
+        severity: "warning",
+        path,
+        position: node.position,
+        message: "dump.md contains stranded non-heading content",
+        suggestedFix: "Move or archive stranded dump content.",
+        triggerPath: path
+      })
+    )
   }
 
   return Chunk.empty<CheckFinding>()

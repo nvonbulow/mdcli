@@ -2,7 +2,7 @@ import { assert, describe, it } from "@effect/vitest"
 import { Chunk, Effect, Layer, Result, Trie } from "effect"
 
 import { CheckModel, CheckService, make } from "@kb/vault-checks"
-import { MarkdownModel, MarkdownParser, Vault, VaultService } from "@kb/vault-core"
+import { MarkdownModel, MarkdownParser, Vault, VaultService, notes } from "@kb/vault-core"
 import * as VaultScope from "@kb/vault-core"
 import { MarkdownParseError, MarkdownProcessor } from "@kb/markdown-ast"
 
@@ -32,7 +32,6 @@ const vaultLayer = (state: TestVaultState) =>
     VaultService,
     Effect.gen(function* () {
       const parser = yield* MarkdownParser
-      const markdownProcessor = yield* MarkdownProcessor
 
       const readText = (path: string) => Effect.succeed(state.files[absolutePath(path)] ?? "")
       const parseMarkdown = (path: string, contents: string) =>
@@ -53,7 +52,7 @@ const vaultLayer = (state: TestVaultState) =>
         }
         return parseMarkdown(path, state.files[absolutePath(path)] ?? "")
       }
-      const readMarkdownTree = (scope: VaultScope.VaultScope) =>
+      const readMarkdownFiles = (scope: VaultScope.VaultScope) =>
         Effect.gen(function* () {
           const ignored = ignoredMarkdownPaths(state.files)
           const paths = relativeMarkdownPaths(state.files).filter((path) => matchesScope(scope, path) && !ignored.has(path))
@@ -74,20 +73,17 @@ const vaultLayer = (state: TestVaultState) =>
               })
             )
           })
-          return {
-            root: "",
-            files: Trie.fromIterable(files)
-          }
+          return Trie.fromIterable(files)
         })
 
       return VaultService.of({
         readText,
         writeText: () => Effect.void,
         readMarkdown,
-        readMarkdownTree,
+        readMarkdownFiles,
         scoped: (scope) =>
-          Effect.flatMap(readMarkdownTree(scope), (tree) =>
-            Vault.make({ scope, tree }).pipe(Effect.provideService(MarkdownProcessor, markdownProcessor))
+          Effect.flatMap(readMarkdownFiles(scope), (files) =>
+            Vault.make({ scope, files })
           )
       })
     })
@@ -329,10 +325,10 @@ describe("CheckService", () => {
     return Effect.gen(function* () {
       const check = yield* CheckService
       const report = yield* check.run(VaultScope.allMarkdown)
-      const notes = toArray(yield* report.vault.notes())
+      const reportNotes = toArray(notes(report.vault))
 
       assert.deepStrictEqual(
-        notes.map((note) => note.path),
+        reportNotes.map((note) => note.path),
         ["Notes/Drift.md"]
       )
       assert.deepStrictEqual(summaries(report.findings), [
@@ -478,18 +474,19 @@ describe("CheckService", () => {
       }
     }
     const check = make({
-      analyzeFile: (path: string) =>
-        Effect.succeed(
-          Chunk.of(
+      analyzeFile: (file: MarkdownModel.MarkdownFile) =>
+        Effect.sync(() => {
+          assert.ok(file instanceof MarkdownModel.MarkdownFile)
+          return Chunk.of(
             new CheckModel.CheckFinding({
               category: "catalog",
               severity: "warning",
-              path,
-              message: `checked ${path}`,
-              triggerPath: path
+              path: file.path ?? "",
+              message: `checked ${file.path ?? ""}`,
+              triggerPath: file.path
             })
           )
-        )
+        })
     })
 
     return Effect.gen(function* () {

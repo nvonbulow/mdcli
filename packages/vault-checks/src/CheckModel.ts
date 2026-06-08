@@ -1,5 +1,6 @@
 import { Chunk, Context, Data } from "effect"
 import type { VaultScope, VaultShape } from "@kb/vault-core"
+import { sourceLine as vaultSourceLine } from "@kb/vault-core"
 import type * as VaultCore from "@kb/vault-core"
 
 type SourcePosition = VaultCore.MarkdownModel.SourcePosition
@@ -26,7 +27,7 @@ export class CheckReport extends Data.Class<{
 }> {}
 
 export const sourceLine = (report: CheckReport, finding: CheckFinding): string | undefined =>
-  report.vault.sourceLine(finding.path, finding.position?.start.line ?? 0)
+  vaultSourceLine(report.vault, finding.path, finding.position?.start.line ?? 0)
 
 export type CheckIndexes = {
   readonly notesByKey: ReadonlyMap<string, Chunk.Chunk<string>>

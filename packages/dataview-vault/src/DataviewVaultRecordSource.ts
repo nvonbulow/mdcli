@@ -8,7 +8,7 @@ import {
   type DataviewValue
 } from "@kb/dataview"
 import { fromPath, fromPattern, isGlobPattern, VaultService, type VaultScope } from "@kb/vault-core"
-import { type Task, taskRecordsForTreeNoDeps } from "@kb/vault-tasks"
+import { type Task, taskRecordsForVaultNoDeps } from "@kb/vault-tasks"
 import * as Chunk from "effect/Chunk"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
@@ -23,8 +23,8 @@ export class DataviewVaultRecordSource {
       ) {
         const scope = yield* scopeFromQuery(query)
         return yield* Effect.gen(function* () {
-          const tree = yield* vaultService.readMarkdownTree(scope)
-          const tasks = yield* taskRecordsForTreeNoDeps(scope, tree)
+          const vault = yield* vaultService.scoped(scope)
+          const tasks = yield* taskRecordsForVaultNoDeps(vault)
           return Chunk.toReadonlyArray(Chunk.map(tasks, (record) => taskRecord(record.task)))
         }).pipe(Effect.mapError(toRecordSourceError))
       })

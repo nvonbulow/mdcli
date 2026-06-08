@@ -2,10 +2,23 @@ import { assert, describe, it } from "@effect/vitest"
 import { Chunk, Effect, FileSystem, Layer, Path, Result, Trie } from "effect"
 import { MarkdownFile } from "../src/markdown/MarkdownModel"
 import * as Glob from "../src/Glob"
-import { MarkdownParseError, MarkdownProcessor } from "@kb/markdown-ast"
+import { MarkdownParseError } from "@kb/markdown-ast"
 import { Vault } from "../src/Vault"
 import { VaultService } from "../src/VaultService"
 import { fromPath } from "../src/VaultScope"
+import { search } from "../src/VaultSearch"
+import { sourceExcerpt, sourceLine } from "../src/VaultSource"
+import {
+  diagnostics,
+  fencedBlocks,
+  filterVault,
+  frontmatter,
+  headings,
+  links,
+  listItems,
+  notes,
+  tags
+} from "../src/VaultProjections"
 
 const testRoot = "/effect-vault-test"
 const toArray = <A>(chunk: Chunk.Chunk<A>): ReadonlyArray<A> => Chunk.toReadonlyArray(chunk)
@@ -103,32 +116,33 @@ describe("Vault", () => {
     return Effect.gen(function* () {
       const vaultService = yield* VaultService
       const vault = yield* vaultService.scoped(fromPath("Notes"))
-      const notes = toArray(yield* vault.notes())
-      const frontmatter = toArray(yield* vault.frontmatter())
-      const headings = toArray(yield* vault.headings())
-      const links = toArray(yield* vault.links())
-      const tags = toArray(yield* vault.tags())
-      const listItems = toArray(yield* vault.listItems())
-      const fencedBlocks = toArray(yield* vault.fencedBlocks())
-      const finance = toArray(yield* vault.search(fromPath("Notes"), "finance"))
+      const searchFile = filterVault(vault, fromPath("Notes/Search.md"))
+      const noteRecords = toArray(notes(vault))
+      const frontmatterRecords = toArray(frontmatter(vault))
+      const headingRecords = toArray(headings(vault))
+      const linkRecords = toArray(links(vault))
+      const tagRecords = toArray(tags(vault))
+      const listItemRecords = toArray(listItems(searchFile))
+      const fencedBlockRecords = toArray(fencedBlocks(searchFile))
+      const finance = toArray(search(filterVault(vault, fromPath("Notes")), "finance"))
 
       assert.deepStrictEqual(
-        notes.map((note) => note.path),
+        noteRecords.map((note) => note.path),
         ["Notes/Runbook.md", "Notes/Search.md"]
       )
       assert.deepStrictEqual(
-        frontmatter.map((record) => [record.path, record.value]),
+        frontmatterRecords.map((record) => [record.path, record.value]),
         [["Notes/Search.md", { status: "active" }]]
       )
       assert.deepStrictEqual(
-        headings.map((heading) => [heading.path, heading.text]),
+        headingRecords.map((heading) => [heading.path, heading.text]),
         [
           ["Notes/Runbook.md", "Incident Guide #ops"],
           ["Notes/Search.md", "Quarterly Review #meeting"]
         ]
       )
       assert.deepStrictEqual(
-        links.map((link) => [link.path, link.target]),
+        linkRecords.map((link) => [link.path, link.target]),
         [
           ["Notes/Search.md", "Work"],
           ["Notes/Search.md", "Runbook"],
@@ -136,7 +150,7 @@ describe("Vault", () => {
         ]
       )
       assert.deepStrictEqual(
-        tags.map((tag) => [tag.path, tag.value]),
+        tagRecords.map((tag) => [tag.path, tag.value]),
         [
           ["Notes/Runbook.md", "#ops"],
           ["Notes/Search.md", "#meeting"],
@@ -144,17 +158,19 @@ describe("Vault", () => {
         ]
       )
       assert.deepStrictEqual(
-        listItems.map((item) => [item.path, item.text, item.checked]),
+        listItemRecords.map((item) => [item.path, item.text, item.checked]),
         [["Notes/Search.md", "Follow Ledger #task Finance Work", false]]
       )
       assert.deepStrictEqual(
-        fencedBlocks.map((block) => [block.path, block.language, block.value]),
+        fencedBlockRecords.map((block) => [block.path, block.language, block.value]),
         [["Notes/Search.md", "dataview", 'TASK FROM "Notes"']]
       )
       assert.deepStrictEqual(
         finance.map((result) => [result._tag, result.path, result.text]),
         [["Link", "Notes/Search.md", "Finance"]]
       )
+      assert.strictEqual(sourceLine(vault, "Notes/Search.md", 4), "# Quarterly Review #meeting")
+      assert.strictEqual(sourceExcerpt(vault, "Notes/Search.md", headingRecords[1]?.position), "# Quarterly Review #meeting")
       assert.strictEqual(state.writes, 0)
     }).pipe(Effect.provide(vaultLayer(state)))
   })
@@ -174,17 +190,17 @@ describe("Vault", () => {
       const vaultService = yield* VaultService
       const vault = yield* vaultService.scoped(fromPath("."))
 
-      const notes = toArray(yield* vault.notes())
-      const headings = toArray(yield* vault.headings())
-      const ignoredContentResults = toArray(yield* vault.search(fromPath("."), "instructions"))
-      const keptResults = toArray(yield* vault.search(fromPath("."), "kept"))
+      const noteRecords = toArray(notes(vault))
+      const headingRecords = toArray(headings(vault))
+      const ignoredContentResults = toArray(search(vault, "instructions"))
+      const keptResults = toArray(search(vault, "kept"))
 
       assert.deepStrictEqual(
-        notes.map((note) => note.path),
+        noteRecords.map((note) => note.path),
         ["Notes/Kept.md"]
       )
       assert.deepStrictEqual(
-        headings.map((heading) => [heading.path, heading.text]),
+        headingRecords.map((heading) => [heading.path, heading.text]),
         [["Notes/Kept.md", "Kept Note #kept"]]
       )
       assert.deepStrictEqual(
@@ -201,6 +217,7 @@ describe("Vault", () => {
       )
     }).pipe(Effect.provide(vaultLayer(state)))
   })
+
   it.effect("reuses cached projection inputs across repeated scoped facades", () => {
     const state: TestFileSystemState = {
       files: {
@@ -213,11 +230,11 @@ describe("Vault", () => {
     return Effect.gen(function* () {
       const vaultService = yield* VaultService
       const firstVault = yield* vaultService.scoped(fromPath("Notes"))
-      const firstListItems = toArray(yield* firstVault.listItems())
+      const firstListItems = toArray(listItems(firstVault))
       const readsAfterFirstProjection = state.reads
 
       const secondVault = yield* vaultService.scoped(fromPath("Notes"))
-      const secondListItems = toArray(yield* secondVault.listItems())
+      const secondListItems = toArray(listItems(secondVault))
 
       assert.deepStrictEqual(
         firstListItems.map((item) => [item.path, item.text]),
@@ -250,40 +267,34 @@ describe("Vault", () => {
       }
     })
     const parseFailure = new MarkdownParseError({ message: "bad markdown", input: "!!!" })
+    const files = Trie.fromIterable<Result.Result<MarkdownFile, MarkdownParseError>>([
+      ["Notes/Bad.md", Result.fail(parseFailure) as Result.Result<MarkdownFile, MarkdownParseError>] as const,
+      ["Notes/Good.md", Result.succeed(goodFile) as Result.Result<MarkdownFile, MarkdownParseError>] as const
+    ])
     const vaultService = VaultService.of({
       readText: () => Effect.succeed(""),
       writeText: () => Effect.void,
       readMarkdown: () => Effect.succeed(goodFile),
-      readMarkdownTree: () =>
-        Effect.succeed({
-          root: "",
-          files: Trie.fromIterable<Result.Result<MarkdownFile, MarkdownParseError>>([
-            ["Notes/Bad.md", Result.fail(parseFailure) as Result.Result<MarkdownFile, MarkdownParseError>] as const,
-            ["Notes/Good.md", Result.succeed(goodFile) as Result.Result<MarkdownFile, MarkdownParseError>] as const
-          ])
-        }),
-      scoped: (scope) =>
-        Effect.flatMap(vaultService.readMarkdownTree(scope), (tree) =>
-          Vault.make({ scope, tree }).pipe(Effect.provide(MarkdownProcessor.layer))
-        )
+      readMarkdownFiles: () => Effect.succeed(files),
+      scoped: (scope) => Effect.flatMap(vaultService.readMarkdownFiles(scope), (files) => Vault.make({ scope, files }))
     })
 
     return Effect.gen(function* () {
       const vault = yield* vaultService.scoped(fromPath("Notes"))
-      const notes = toArray(yield* vault.notes())
-      const headings = toArray(yield* vault.headings())
-      const diagnostics = toArray(yield* vault.diagnostics())
+      const noteRecords = toArray(notes(vault))
+      const headingRecords = toArray(headings(vault))
+      const diagnosticRecords = toArray(diagnostics(vault))
 
       assert.deepStrictEqual(
-        notes.map((note) => note.path),
+        noteRecords.map((note) => note.path),
         ["Notes/Good.md"]
       )
       assert.deepStrictEqual(
-        headings.map((heading) => [heading.path, heading.text]),
+        headingRecords.map((heading) => [heading.path, heading.text]),
         [["Notes/Good.md", "Good Note"]]
       )
       assert.deepStrictEqual(
-        diagnostics.map((diagnostic) => [diagnostic.path, diagnostic.message]),
+        diagnosticRecords.map((diagnostic) => [diagnostic.path, diagnostic.message]),
         [["Notes/Bad.md", "bad markdown"]]
       )
     })

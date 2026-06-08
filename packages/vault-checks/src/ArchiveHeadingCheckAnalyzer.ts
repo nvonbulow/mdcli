@@ -1,15 +1,15 @@
 import { Chunk, Context, Effect, Layer } from "effect"
-import { fromPath } from "@kb/vault-core"
+import { headingRecordsForFile, type MarkdownModel } from "@kb/vault-core"
 import { CheckContext, CheckFinding } from "./CheckModel"
 import type { CheckAnalyzer } from "./CheckAnalyzer"
 import { isArchivePath, normalizeKey, sortedPaths } from "./CheckAnalyzerUtils"
 
-const analyzeFile = Effect.fnUntraced(function* (path: string) {
+const analyzeFile = Effect.fnUntraced(function* (file: MarkdownModel.MarkdownFile) {
   const context = yield* CheckContext
+  const path = file.path ?? ""
   let findings = Chunk.empty<CheckFinding>()
 
-  const headings = yield* context.vault.headings(fromPath(path))
-  for (const heading of headings) {
+  for (const heading of headingRecordsForFile(path, file)) {
     if (heading.depth !== 1) {
       continue
     }

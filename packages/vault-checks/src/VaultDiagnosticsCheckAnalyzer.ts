@@ -1,23 +1,10 @@
 import { Chunk, Context, Effect, Layer } from "effect"
-import { fromPath } from "@kb/vault-core"
-import { CheckContext, CheckFinding } from "./CheckModel"
+import type { MarkdownModel } from "@kb/vault-core"
 import type { CheckAnalyzer } from "./CheckAnalyzer"
+import type { CheckFinding } from "./CheckModel"
 
-const analyzeFile = Effect.fnUntraced(function* (path: string) {
-  const context = yield* CheckContext
-  const diagnostics = yield* context.vault.diagnostics(fromPath(path))
-  return Chunk.map(
-    diagnostics,
-    (diagnostic) =>
-      new CheckFinding({
-        category: "catalog",
-        severity: "error",
-        path: diagnostic.path,
-        message: diagnostic.message,
-        suggestedFix: "Fix the markdown parse error or remove the unreadable file.",
-        triggerPath: diagnostic.path
-      })
-  )
+const analyzeFile = Effect.fnUntraced(function* (_file: MarkdownModel.MarkdownFile) {
+  return Chunk.empty<CheckFinding>()
 })
 
 export class VaultDiagnosticsCheckAnalyzer extends Context.Service<VaultDiagnosticsCheckAnalyzer, CheckAnalyzer>()(

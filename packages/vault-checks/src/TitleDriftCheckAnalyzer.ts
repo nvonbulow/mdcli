@@ -1,17 +1,21 @@
 import { Chunk, Context, Effect, Layer } from "effect"
-import { fromPath } from "@kb/vault-core"
-import { CheckContext, CheckFinding } from "./CheckModel"
+import {
+  frontmatterRecordsForFile,
+  headingRecordsForFile,
+  noteRecordsForFile,
+  type MarkdownModel
+} from "@kb/vault-core"
+import { CheckFinding } from "./CheckModel"
 import type { CheckAnalyzer } from "./CheckAnalyzer"
 import { firstDepthOneHeading, normalizeKey, titleFromPath } from "./CheckAnalyzerUtils"
 
-const analyzeFile = Effect.fnUntraced(function* (path: string) {
-  const context = yield* CheckContext
+const analyzeFile = Effect.fnUntraced(function* (file: MarkdownModel.MarkdownFile) {
+  const path = file.path ?? ""
   let findings = Chunk.empty<CheckFinding>()
+  const notes = noteRecordsForFile(path, file)
+  const headings = headingRecordsForFile(path, file)
+  const frontmatter = frontmatterRecordsForFile(path, file)
 
-  const fileScope = fromPath(path)
-  const notes = yield* context.vault.notes(fileScope)
-  const headings = yield* context.vault.headings(fileScope)
-  const frontmatter = yield* context.vault.frontmatter(fileScope)
   for (const note of notes) {
     const titleKey = normalizeKey(titleFromPath(note.path))
     const firstH1 = firstDepthOneHeading(headings, note.path)

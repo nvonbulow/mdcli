@@ -1,11 +1,27 @@
-export { Markdown } from "./markdown/Markdown"
+export * as Markdown from "./markdown/Markdown"
 export * as MarkdownModel from "./markdown/MarkdownModel"
 export { MarkdownParser, type MarkdownParserService } from "./markdown/MarkdownParser"
 export * from "./VaultScope"
 export * as Glob from "./Glob"
 export { VaultService } from "./VaultService"
+export { Vault, type VaultFiles, type VaultShape } from "./Vault"
 export {
-  Vault,
+  diagnostics,
+  fencedBlockRecordsForFile,
+  fencedBlocks,
+  filterVault,
+  frontmatter,
+  frontmatterRecordsForFile,
+  headingRecordsForFile,
+  headings,
+  linkRecordsForFile,
+  links,
+  listItemRecordsForFile,
+  listItems,
+  noteRecordsForFile,
+  notes,
+  tagRecordsForFile,
+  tags,
   type VaultDiagnostic,
   type VaultFencedBlockRecord,
   type VaultFrontmatterRecord,
@@ -13,10 +29,9 @@ export {
   type VaultLinkRecord,
   type VaultListItemRecord,
   type VaultNoteRecord,
-  type VaultProjectionMethods,
   type VaultRecord,
-  type VaultSearchResult,
-  type VaultShape,
   type VaultTagRecord
-} from "./Vault"
+} from "./VaultProjections"
+export { search, type VaultSearchResult } from "./VaultSearch"
+export { sourceExcerpt, sourceLine } from "./VaultSource"
 export * from "./VaultErrors"

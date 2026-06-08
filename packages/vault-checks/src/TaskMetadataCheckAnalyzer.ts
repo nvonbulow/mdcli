@@ -1,16 +1,17 @@
+import { MarkdownProcessor } from "@kb/markdown-ast"
 import { Chunk, Context, Effect, Layer } from "effect"
-import { fromPath } from "@kb/vault-core"
-import { isIsoDate, taskRecordsForTreeNoDeps } from "@kb/vault-tasks"
-import { CheckContext, CheckFinding } from "./CheckModel"
+import { type MarkdownModel } from "@kb/vault-core"
+import { isIsoDate, taskRecordsForFile } from "@kb/vault-tasks"
+import { CheckFinding } from "./CheckModel"
 import type { CheckAnalyzer } from "./CheckAnalyzer"
 
 const dateFieldNames = ["scheduled", "due", "completed"] as const
 
-const analyzeFile = Effect.fnUntraced(function* (path: string) {
-  const context = yield* CheckContext
+const analyzeFile = Effect.fnUntraced(function* (file: MarkdownModel.MarkdownFile) {
+  const path = file.path ?? ""
   let findings = Chunk.empty<CheckFinding>()
 
-  const tasks = yield* taskRecordsForTreeNoDeps(fromPath(path), context.vault.tree)
+  const tasks = yield* taskRecordsForFile(path, file).pipe(Effect.provide(MarkdownProcessor.layer))
   for (const record of tasks) {
     for (const fieldName of dateFieldNames) {
       const value = record.fields[fieldName]

@@ -16,17 +16,17 @@ import {
 import type { PlatformError } from "effect/PlatformError"
 import { Minimatch } from "minimatch"
 import * as Glob from "./Glob"
-import { MarkdownFile, type MarkdownTree } from "./markdown/MarkdownModel"
+import { MarkdownFile } from "./markdown/MarkdownModel"
 import { MarkdownParser } from "./markdown/MarkdownParser"
 import { VaultIoError } from "./VaultErrors"
 import { VaultScope } from "./VaultScope"
-import { Vault, type VaultShape } from "./Vault"
+import { Vault, type VaultFiles, type VaultShape } from "./Vault"
 
 export type VaultServiceShape = {
   readonly readText: (path: string) => Effect.Effect<string, VaultIoError>
   readonly writeText: (path: string, contents: string) => Effect.Effect<void, VaultIoError>
   readonly readMarkdown: (path: string) => Effect.Effect<MarkdownFile, VaultIoError | MarkdownParseError>
-  readonly readMarkdownTree: (scope: VaultScope) => Effect.Effect<MarkdownTree, VaultIoError>
+  readonly readMarkdownFiles: (scope: VaultScope) => Effect.Effect<VaultFiles, VaultIoError>
   readonly scoped: (scope: VaultScope) => Effect.Effect<VaultShape, VaultIoError>
 }
 
@@ -90,7 +90,7 @@ const makeVaultService = (root: string) =>
       return cached.success
     })
 
-    const readMarkdownTree: VaultServiceShape["readMarkdownTree"] = Effect.fn("VaultService.readMarkdownTree")(
+    const readMarkdownFiles: VaultServiceShape["readMarkdownFiles"] = Effect.fn("VaultService.readMarkdownFiles")(
       function* (scope: VaultScope) {
         const patterns = Chunk.toReadonlyArray(Chunk.map(scope.patterns, normalizePath))
         const matches = yield* glob
@@ -104,7 +104,7 @@ const makeVaultService = (root: string) =>
             Effect.mapError(
               (error) =>
                 new VaultIoError({
-                  operation: "readMarkdownTree",
+                  operation: "readMarkdownFiles",
                   path: patterns.join(","),
                   message: globErrorMessage(error.cause)
                 })
@@ -119,10 +119,7 @@ const makeVaultService = (root: string) =>
           Cache.get(markdownCache, path).pipe(Effect.map((file) => [path, file] as const))
         )
 
-        return {
-          root: "",
-          files: Trie.fromIterable(files)
-        }
+        return Trie.fromIterable(files)
       }
     )
 
@@ -138,10 +135,10 @@ const makeVaultService = (root: string) =>
     })
 
     const scoped = Effect.fn("VaultService.scoped")(function* (scope: VaultScope) {
-      const tree = yield* readMarkdownTree(scope)
+      const files = yield* readMarkdownFiles(scope)
       return yield* Vault.make({
         scope,
-        tree
+        files
       }).pipe(Effect.provideService(MarkdownProcessor, markdownProcessor))
     })
 
@@ -149,7 +146,7 @@ const makeVaultService = (root: string) =>
       readText,
       writeText,
       readMarkdown,
-      readMarkdownTree,
+      readMarkdownFiles,
       scoped
     })
   })

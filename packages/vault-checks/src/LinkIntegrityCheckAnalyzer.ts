@@ -1,16 +1,16 @@
 import { Chunk, Context, Effect, Layer } from "effect"
-import { fromPath } from "@kb/vault-core"
+import { linkRecordsForFile, type MarkdownModel } from "@kb/vault-core"
 import { CheckContext, CheckFinding } from "./CheckModel"
 import type { CheckAnalyzer } from "./CheckAnalyzer"
 import { linkFindingKey, matchingPaths } from "./CheckAnalyzerUtils"
 
-const analyzeFile = Effect.fnUntraced(function* (path: string) {
+const analyzeFile = Effect.fnUntraced(function* (file: MarkdownModel.MarkdownFile) {
   const context = yield* CheckContext
+  const path = file.path ?? ""
   let findings = Chunk.empty<CheckFinding>()
   const seen = new Set<string>()
 
-  const links = yield* context.vault.links(fromPath(path))
-  for (const link of links) {
+  for (const link of linkRecordsForFile(path, file)) {
     const matches = matchingPaths(
       context.indexes.notesByKey,
       context.indexes.basenameByKey,

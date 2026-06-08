@@ -1,6 +1,7 @@
 import { assert, describe, it } from "@effect/vitest"
 import { Chunk, Effect, FileSystem, Layer, Option, Path, Result, Trie } from "effect"
-import { Markdown } from "../src/markdown/Markdown"
+import { listItemText } from "@kb/markdown-ast"
+import * as Markdown from "../src/markdown/Markdown"
 import * as Glob from "../src/Glob"
 import { VaultService } from "../src/VaultService"
 import { fromPath } from "../src/VaultScope"
@@ -84,7 +85,7 @@ describe("VaultService", () => {
     }).pipe(Effect.provide(vaultLayer(files)))
   })
 
-  it.effect("reads markdown trees with relative source paths", () => {
+  it.effect("reads markdown files with relative source paths", () => {
     const files: TestFiles = {
       [`${testRoot}/30-Projects/Work/Roadmap.md`]: "# Roadmap",
       [`${testRoot}/30-Projects/Personal/Notes.txt`]: "not markdown",
@@ -93,11 +94,10 @@ describe("VaultService", () => {
 
     return Effect.gen(function* () {
       const vault = yield* VaultService
-      const tree = yield* vault.readMarkdownTree(fromPath("30-Projects"))
-      const entries = Array.from(Trie.entries(tree.files))
+      const markdownFiles = yield* vault.readMarkdownFiles(fromPath("30-Projects"))
+      const entries = Array.from(Trie.entries(markdownFiles))
       const files = entries.map(([, result]) => Result.getOrThrow(result))
 
-      assert.strictEqual(tree.root, "")
       assert.deepStrictEqual(
         entries.map(([path]) => path),
         ["30-Projects/Personal/Plan.md", "30-Projects/Work/Roadmap.md"]
@@ -126,7 +126,7 @@ describe("VaultService", () => {
       assert.strictEqual(first.contents, "# Inbox\n- [ ] Old task #task")
       const firstListItems = Chunk.toReadonlyArray(Markdown.listItems(first))
       assert.deepStrictEqual(
-        firstListItems.map((item) => Markdown.listItemText(item)),
+        firstListItems.map((item) => listItemText(item)),
         ["Old task #task"]
       )
       assert.deepStrictEqual(
@@ -141,7 +141,7 @@ describe("VaultService", () => {
       assert.strictEqual(second.contents, "# Inbox\n- [x] New task #task")
       const secondListItems = Chunk.toReadonlyArray(Markdown.listItems(second))
       assert.deepStrictEqual(
-        secondListItems.map((item) => Markdown.listItemText(item)),
+        secondListItems.map((item) => listItemText(item)),
         ["New task #task"]
       )
       assert.deepStrictEqual(

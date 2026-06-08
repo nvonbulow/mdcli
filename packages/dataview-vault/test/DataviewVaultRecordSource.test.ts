@@ -11,6 +11,7 @@ import { DataviewVaultRecordSource } from "@kb/dataview-vault"
 import {
   MarkdownModel,
   MarkdownParser,
+  Vault,
   VaultService,
   type MarkdownParseError,
   type VaultScope
@@ -34,7 +35,7 @@ const vaultLayer = (filesByPath: Readonly<Record<string, string>>) =>
           parser.parse(contents),
           (file) => new MarkdownModel.MarkdownFile({ path, contents: file.contents, mdast: file.mdast })
         )
-      const readMarkdownTree = (_scope: VaultScope) =>
+      const readMarkdownFiles = (scope: VaultScope) =>
         Effect.gen(function* () {
           const files = yield* Effect.forEach(Object.entries(filesByPath), ([path, contents]) =>
             Effect.match(parseMarkdown(path, contents), {
@@ -44,19 +45,34 @@ const vaultLayer = (filesByPath: Readonly<Record<string, string>>) =>
                 [path, Result.succeed(file) as Result.Result<MarkdownModel.MarkdownFile, MarkdownParseError>] as const
             })
           )
-          return { root: "", files: Trie.fromIterable(files) }
+          return Trie.filter(Trie.fromIterable(files), (_result, path) => matchesScope(scope, path))
         })
 
       return VaultService.of({
         readText: () => Effect.succeed(""),
         writeText: () => Effect.void,
         readMarkdown: (path) => parseMarkdown(path, filesByPath[path] ?? ""),
-        readMarkdownTree,
-        scoped: () => Effect.die(new Error("scoped should not be used by dataview vault tests"))
+        readMarkdownFiles,
+        scoped: (scope) => Effect.flatMap(readMarkdownFiles(scope), (files) => Vault.make({ scope, files }))
       })
     })
   ).pipe(Layer.provide(MarkdownParser.layer))
 
+
+const matchesScope = (scope: VaultScope, path: string): boolean => {
+  for (const pattern of scope.patterns) {
+    if (pattern === "**/*.md" || pattern === path) {
+      return true
+    }
+    if (pattern.endsWith("/**/*.md") && path.startsWith(`${pattern.slice(0, -"/**/*.md".length)}/`)) {
+      return true
+    }
+    if (pattern.endsWith("*.md") && path.startsWith(pattern.slice(0, -"*.md".length))) {
+      return true
+    }
+  }
+  return false
+}
 const recordSourceLayer = DataviewVaultRecordSource.layerNoDeps.pipe(Layer.provide(vaultLayer(testVault)))
 
 const programLayer = DataviewProgram.layerNoDeps.pipe(

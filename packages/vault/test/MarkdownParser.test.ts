@@ -1,7 +1,7 @@
 import { assert, describe, it } from "@effect/vitest"
-import { MarkdownProcessor } from "@kb/markdown-ast"
+import { listItemText, nodeText, MarkdownProcessor } from "@kb/markdown-ast"
 import { Chunk, Effect, Layer, Option } from "effect"
-import { Markdown } from "../src/markdown/Markdown"
+import * as Markdown from "../src/markdown/Markdown"
 import { MarkdownParser } from "../src/markdown/MarkdownParser"
 
 const parserLayer = Layer.mergeAll(MarkdownParser.layer, MarkdownProcessor.layer)
@@ -77,7 +77,7 @@ describe("MarkdownParser", () => {
 
       assert.strictEqual(headings.length, 1)
       assert.strictEqual(headings[0]?.depth, 1)
-      assert.strictEqual(Markdown.text(headings[0]!), "Project Home page #top")
+      assert.strictEqual(nodeText(headings[0]!), "Project Home page #top")
 
       assert.deepStrictEqual(
         wikilinks.map((link) => [link.target, optionValue(link.header), optionValue(link.alias), optionValue(link.block), link.original]),
@@ -94,17 +94,17 @@ describe("MarkdownParser", () => {
 
       assert.strictEqual(listItems.length, 3)
       assert.strictEqual(optionValue(listItems[0]!.checked), false)
-      assert.strictEqual(Markdown.listItemText(listItems[0]!), "Task body #task 2026-05-24 TaskNote")
+      assert.strictEqual(listItemText(listItems[0]!), "Task body #task 2026-05-24 TaskNote")
       assert.strictEqual(optionValue(listItems[1]!.checked), true)
       assert.strictEqual(optionValue(listItems[2]!.checked), undefined)
-      assert.strictEqual(Markdown.listItemText(listItems[2]!), "Plain list item #plain")
+      assert.strictEqual(listItemText(listItems[2]!), "Plain list item #plain")
 
       assert.strictEqual(tasks.length, 2)
 
       assert.strictEqual(blocks.length, 2)
-      assert.strictEqual(Markdown.fencedBlockLanguage(blocks[0]!), "dataview")
+      assert.strictEqual(optionValue(blocks[0]!.lang), "dataview")
       assert.strictEqual(blocks[0]?.value, "TABLE file.name")
-      assert.strictEqual(Markdown.fencedBlockLanguage(blocks[1]!), "text")
+      assert.strictEqual(optionValue(blocks[1]!.lang), "text")
       assert.strictEqual(blocks[1]?.value, "#ignored-code")
     }).pipe(Effect.provide(parserLayer))
   )

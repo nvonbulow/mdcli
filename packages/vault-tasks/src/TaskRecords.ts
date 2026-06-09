@@ -1,6 +1,6 @@
 import { MarkdownProcessor, type ListItemNode, type MarkdownStringifyError } from "@kb/markdown-ast"
 import { Chunk, Effect, Option } from "effect"
-import { Markdown, MarkdownModel, notes, type VaultShape } from "@kb/vault-core"
+import { Markdown, MarkdownModel, notes, type Vault } from "@kb/vault-core"
 import { Task } from "./TaskModel"
 
 type MarkdownFile = MarkdownModel.MarkdownFile
@@ -46,7 +46,7 @@ export const taskRecordsForFile = (
   })
 
 export const taskRecordsForVault = (
-  vault: VaultShape
+  vault: Vault
 ): Effect.Effect<Chunk.Chunk<VaultTaskRecord>, MarkdownStringifyError, MarkdownProcessor> =>
   Effect.gen(function* () {
     let records = Chunk.empty<VaultTaskRecord>()
@@ -57,7 +57,7 @@ export const taskRecordsForVault = (
   })
 
 export const taskRecordsForVaultNoDeps = (
-  vault: VaultShape
+  vault: Vault
 ): Effect.Effect<Chunk.Chunk<VaultTaskRecord>, MarkdownStringifyError> =>
   taskRecordsForVault(vault).pipe(Effect.provide(MarkdownProcessor.layer))
 

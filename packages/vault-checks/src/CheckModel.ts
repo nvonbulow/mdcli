@@ -1,5 +1,5 @@
 import { Chunk, Context, Data } from "effect"
-import type { VaultScope, VaultShape } from "@kb/vault-core"
+import type { Vault, VaultScope } from "@kb/vault-core"
 import { sourceLine as vaultSourceLine } from "@kb/vault-core"
 import type * as VaultCore from "@kb/vault-core"
 
@@ -22,7 +22,7 @@ export class CheckFinding extends Data.Class<{
 
 export class CheckReport extends Data.Class<{
   readonly scope: VaultScope
-  readonly vault: VaultShape
+  readonly vault: Vault
   readonly findings: Chunk.Chunk<CheckFinding>
 }> {}
 
@@ -37,11 +37,11 @@ export type CheckIndexes = {
   readonly archiveH1ByKey: ReadonlyMap<string, Chunk.Chunk<string>>
 }
 
-export type CheckContextShape = {
+export interface CheckContext {
   readonly scope: VaultScope
-  readonly vault: VaultShape
+  readonly vault: Vault
   readonly selected: (path: string) => boolean
   readonly indexes: CheckIndexes
 }
 
-export class CheckContext extends Context.Service<CheckContext, CheckContextShape>()("@kb/vault-checks/CheckContext") {}
+export class CheckContext extends Context.Service<CheckContext, CheckContext>()("@kb/vault-checks/CheckContext") {}

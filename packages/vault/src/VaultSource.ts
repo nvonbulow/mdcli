@@ -1,15 +1,15 @@
 import { Option, Result, Trie } from "effect"
 
 import type { SourcePosition } from "./markdown/MarkdownModel"
-import type { VaultShape } from "./Vault"
+import type { Vault } from "./Vault"
 
-export const sourceLine = (vault: VaultShape, path: string, line: number): string | undefined =>
+export const sourceLine = (vault: Vault, path: string, line: number): string | undefined =>
   lineOf(fileContents(vault, path), line)
 
-export const sourceExcerpt = (vault: VaultShape, path: string, position: SourcePosition | undefined): string | undefined =>
+export const sourceExcerpt = (vault: Vault, path: string, position: SourcePosition | undefined): string | undefined =>
   lineOf(fileContents(vault, path), position?.start.line)
 
-const fileContents = (vault: VaultShape, path: string): string | undefined => {
+const fileContents = (vault: Vault, path: string): string | undefined => {
   const result = Trie.get(vault.files, path)
   return Option.isSome(result) && Result.isSuccess(result.value) ? result.value.success.contents : undefined
 }

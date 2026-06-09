@@ -1,4 +1,4 @@
-export { CalendarService, type CalendarServiceShape } from "./CalendarService"
+export { CalendarService } from "./CalendarService"
 export { IsoDate, isIsoDate, Task, TaskParseError, TaskViewName, WeekWindow } from "./TaskModel"
 export {
   taskRecordsForFile,

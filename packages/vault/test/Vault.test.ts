@@ -5,7 +5,7 @@ import * as Glob from "../src/Glob"
 import { MarkdownParseError } from "@kb/markdown-ast"
 import { Vault } from "../src/Vault"
 import { VaultService } from "../src/VaultService"
-import { fromPath } from "../src/VaultScope"
+import { fromPath, type VaultScope } from "../src/VaultScope"
 import { search } from "../src/VaultSearch"
 import { sourceExcerpt, sourceLine } from "../src/VaultSource"
 import {
@@ -276,8 +276,8 @@ describe("Vault", () => {
       writeText: () => Effect.void,
       readMarkdown: () => Effect.succeed(goodFile),
       readMarkdownFiles: () => Effect.succeed(files),
-      scoped: (scope) => Effect.flatMap(vaultService.readMarkdownFiles(scope), (files) => Vault.make({ scope, files }))
-    })
+      scoped: (scope: VaultScope) => Effect.flatMap(vaultService.readMarkdownFiles(scope), (files) => Vault.make({ scope, files }))
+    } as unknown as VaultService)
 
     return Effect.gen(function* () {
       const vault = yield* vaultService.scoped(fromPath("Notes"))

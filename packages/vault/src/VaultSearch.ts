@@ -1,6 +1,6 @@
 import { Chunk, String as Str } from "effect"
 
-import type { VaultShape } from "./Vault"
+import type { Vault } from "./Vault"
 import {
   headings,
   links,
@@ -18,7 +18,7 @@ export type VaultSearchResult =
   | { readonly _tag: "Link"; readonly path: string; readonly text: string; readonly record: VaultLinkRecord }
   | { readonly _tag: "Tag"; readonly path: string; readonly text: string; readonly record: VaultTagRecord }
 
-export const search = (vault: VaultShape, query: string): Chunk.Chunk<VaultSearchResult> => {
+export const search = (vault: Vault, query: string): Chunk.Chunk<VaultSearchResult> => {
   const needle = Str.toLowerCase(query)
   const results: Array<VaultSearchResult> = []
 

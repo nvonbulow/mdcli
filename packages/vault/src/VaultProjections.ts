@@ -13,7 +13,7 @@ import { Chunk, Option, Result, String as Str, Trie } from "effect"
 
 import * as Markdown from "./markdown/Markdown"
 import { MarkdownFile, sourceRef, type SourcePosition, type SourceRef } from "./markdown/MarkdownModel"
-import { Vault, type VaultFiles, type VaultShape } from "./Vault"
+import { Vault, type VaultFiles } from "./Vault"
 import { VaultScope } from "./VaultScope"
 
 export type VaultRecord<Node> = {
@@ -69,28 +69,28 @@ export type VaultDiagnostic = {
   readonly cause: MarkdownParseError
 }
 
-export const filterVault = (vault: VaultShape, scope: VaultScope): VaultShape =>
-  Vault.of({ scope, files: filesForPatterns(vault.files, scope.patterns) })
+export const filterVault = (vault: Vault, scope: VaultScope): Vault =>
+  Vault.of({ scope, files: filesForPatterns(vault.files, scope.patterns) } as Vault)
 
-export const notes = (vault: VaultShape): Chunk.Chunk<VaultNoteRecord> => recordsForVault(vault, noteRecordsForFile)
+export const notes = (vault: Vault): Chunk.Chunk<VaultNoteRecord> => recordsForVault(vault, noteRecordsForFile)
 
-export const frontmatter = (vault: VaultShape): Chunk.Chunk<VaultFrontmatterRecord> =>
+export const frontmatter = (vault: Vault): Chunk.Chunk<VaultFrontmatterRecord> =>
   recordsForVault(vault, frontmatterRecordsForFile)
 
-export const headings = (vault: VaultShape): Chunk.Chunk<VaultHeadingRecord> =>
+export const headings = (vault: Vault): Chunk.Chunk<VaultHeadingRecord> =>
   recordsForVault(vault, headingRecordsForFile)
 
-export const links = (vault: VaultShape): Chunk.Chunk<VaultLinkRecord> => recordsForVault(vault, linkRecordsForFile)
+export const links = (vault: Vault): Chunk.Chunk<VaultLinkRecord> => recordsForVault(vault, linkRecordsForFile)
 
-export const tags = (vault: VaultShape): Chunk.Chunk<VaultTagRecord> => recordsForVault(vault, tagRecordsForFile)
+export const tags = (vault: Vault): Chunk.Chunk<VaultTagRecord> => recordsForVault(vault, tagRecordsForFile)
 
-export const listItems = (vault: VaultShape): Chunk.Chunk<VaultListItemRecord> =>
+export const listItems = (vault: Vault): Chunk.Chunk<VaultListItemRecord> =>
   recordsForVault(vault, listItemRecordsForFile)
 
-export const fencedBlocks = (vault: VaultShape): Chunk.Chunk<VaultFencedBlockRecord> =>
+export const fencedBlocks = (vault: Vault): Chunk.Chunk<VaultFencedBlockRecord> =>
   recordsForVault(vault, fencedBlockRecordsForFile)
 
-export const diagnostics = (vault: VaultShape): Chunk.Chunk<VaultDiagnostic> => {
+export const diagnostics = (vault: Vault): Chunk.Chunk<VaultDiagnostic> => {
   let records = Chunk.empty<VaultDiagnostic>()
   for (const [path, result] of Trie.entries(vault.files)) {
     if (Result.isFailure(result)) {
@@ -153,7 +153,7 @@ export const fencedBlockRecordsForFile = (path: string, file: MarkdownFile): Chu
   }))
 
 const recordsForVault = <Record>(
-  vault: VaultShape,
+  vault: Vault,
   project: (path: string, file: MarkdownFile) => Chunk.Chunk<Record>
 ): Chunk.Chunk<Record> => {
   let records = Chunk.empty<Record>()

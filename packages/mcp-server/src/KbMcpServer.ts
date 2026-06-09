@@ -16,12 +16,12 @@ export class ReadFileRangeError extends Data.TaggedError("ReadFileRangeError")<{
   readonly message: string
 }> {}
 
-export type KbMcpServerShape = {
+export interface KbMcpServer {
   readonly vaultIndex: () => Effect.Effect<VaultIndexResult, VaultIoError>
   readonly readFile: (request: ReadFileRequest) => Effect.Effect<ReadFileResult, VaultIoError | ReadFileRangeError>
 }
 
-export class KbMcpServer extends Context.Service<KbMcpServer, KbMcpServerShape>()("@kb/mcp-server/KbMcpServer") {
+export class KbMcpServer extends Context.Service<KbMcpServer, KbMcpServer>()("@kb/mcp-server/KbMcpServer") {
   static readonly layer: Layer.Layer<KbMcpServer, never, VaultService> = Layer.effect(
     KbMcpServer,
     Effect.gen(function* () {
@@ -32,7 +32,7 @@ export class KbMcpServer extends Context.Service<KbMcpServer, KbMcpServerShape>(
           const result = { notes: Chunk.toReadonlyArray(Chunk.map(notes(vault), (note) => note.path)) }
           return yield* Schema.decodeUnknownEffect(VaultIndexResultSchema)(result).pipe(Effect.orDie)
         }),
-        readFile: Effect.fn("@kb/mcp-server/KbMcpServer.readFile")(function* (rawRequest) {
+        readFile: Effect.fn("@kb/mcp-server/KbMcpServer.readFile")(function* (rawRequest: ReadFileRequest) {
           const request = yield* decodeReadFileRequest(rawRequest)
           const contents = yield* vaultService.readText(request.path)
           const lines = linesFromContents(contents)
@@ -53,7 +53,7 @@ export class KbMcpServer extends Context.Service<KbMcpServer, KbMcpServerShape>(
             totalLines
           })
         })
-      })
+      } as unknown as KbMcpServer)
     })
   )
 }

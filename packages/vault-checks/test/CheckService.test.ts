@@ -81,11 +81,11 @@ const vaultLayer = (state: TestVaultState) =>
         writeText: () => Effect.void,
         readMarkdown,
         readMarkdownFiles,
-        scoped: (scope) =>
+        scoped: (scope: VaultScope.VaultScope) =>
           Effect.flatMap(readMarkdownFiles(scope), (files) =>
             Vault.make({ scope, files })
           )
-      })
+      } as unknown as VaultService)
     })
   ).pipe(Layer.provide(Layer.mergeAll(MarkdownParser.layer, MarkdownProcessor.layer)))
 

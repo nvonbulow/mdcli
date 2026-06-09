@@ -51,15 +51,15 @@ const vaultLayer = (filesByPath: Readonly<Record<string, string>>) =>
         })
 
       return VaultService.of({
-        readText: (path) =>
+        readText: (path: string) =>
           path in filesByPath
             ? Effect.succeed(filesByPath[path]!)
             : Effect.fail(new VaultIoError({ operation: "readText", path, message: "Missing test file" })),
         writeText: () => Effect.void,
-        readMarkdown: (path) => parseMarkdown(path, filesByPath[path] ?? ""),
+        readMarkdown: (path: string) => parseMarkdown(path, filesByPath[path] ?? ""),
         readMarkdownFiles,
-        scoped: (scope) => Effect.flatMap(readMarkdownFiles(scope), (files) => Vault.make({ scope, files }))
-      })
+        scoped: (scope: VaultScope) => Effect.flatMap(readMarkdownFiles(scope), (files) => Vault.make({ scope, files }))
+      } as unknown as VaultService)
     })
   ).pipe(Layer.provide(MarkdownParser.layer))
 

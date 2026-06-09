@@ -18,30 +18,30 @@ import {
   VaultService,
   type VaultHeadingRecord,
   type VaultIoError,
-  type VaultScope,
-  type VaultShape
+  type Vault,
+  type VaultScope
 } from "@kb/vault-core"
 import type * as VaultCore from "@kb/vault-core"
 import { isArchivePath, normalizeKey } from "./CheckAnalyzerUtils"
 import { CheckContext, CheckFinding, CheckReport } from "./CheckModel"
-import type { CheckContextShape, CheckIndexes } from "./CheckModel"
+import type { CheckIndexes } from "./CheckModel"
 
 export type CheckServiceError = VaultIoError | VaultCore.Glob.GlobError | MarkdownStringifyError
 const serviceRegistry = new WeakMap<
-  CheckServiceShape,
+  CheckService,
   { readonly scopedVaultForScope: ScopedVaultForScope; readonly analyzers: ReadonlyArray<CheckAnalyzer> }
 >()
 
-export type CheckServiceShape = {
+export interface CheckService {
   readonly run: (scope: VaultScope) => Effect.Effect<CheckReport, CheckServiceError>
   readonly runFile: (scope: VaultScope, path: string) => Effect.Effect<CheckReport, CheckServiceError>
   readonly runFiles: (scope: VaultScope, paths: Chunk.Chunk<string>) => Effect.Effect<CheckReport, CheckServiceError>
 }
-type ScopedVaultForScope = (scope: VaultScope) => Effect.Effect<VaultShape, CheckServiceError>
+type ScopedVaultForScope = (scope: VaultScope) => Effect.Effect<Vault, CheckServiceError>
 
 type MarkdownFile = MarkdownModel.MarkdownFile
 
-export class CheckService extends Context.Service<CheckService, CheckServiceShape>()("@kb/vault-checks/CheckService") {
+export class CheckService extends Context.Service<CheckService, CheckService>()("@kb/vault-checks/CheckService") {
   static readonly layerNoDeps: Layer.Layer<CheckService, never, VaultService> = Layer.effect(
     CheckService,
     Effect.gen(function* () {
@@ -81,23 +81,23 @@ export class CheckService extends Context.Service<CheckService, CheckServiceShap
   static readonly layer: Layer.Layer<CheckService, never, VaultService> = CheckService.layerNoDeps
 }
 
-export const make = (...analyzers: ReadonlyArray<CheckAnalyzer>): CheckServiceShape =>
+export const make = (...analyzers: ReadonlyArray<CheckAnalyzer>): CheckService =>
   makeWithScopedVault(
     (scope) =>
       Effect.gen(function* () {
         const vault = yield* VaultService
         return yield* vault.scoped(scope)
-      }) as Effect.Effect<VaultShape, CheckServiceError>,
+      }) as Effect.Effect<Vault, CheckServiceError>,
     ...analyzers
   )
 
 const makeWithScopedVault = (
   scopedVaultForScope: ScopedVaultForScope,
   ...analyzers: ReadonlyArray<CheckAnalyzer>
-): CheckServiceShape => {
+): CheckService => {
   const runScope = Effect.fn("CheckService.runScope")(function* (
     scope: VaultScope,
-    selectedPathsForVault: (vault: VaultShape) => Chunk.Chunk<string>
+    selectedPathsForVault: (vault: Vault) => Chunk.Chunk<string>
   ) {
     const vault = yield* scopedVaultForScope(scope)
     const selectedPaths = uniquePaths(selectedPathsForVault(vault))
@@ -118,17 +118,17 @@ const makeWithScopedVault = (
   })
 
   const service = CheckService.of({
-    run: (scope) => runScope(scope, selectedPathsFromVault),
-    runFile: (scope, path) => runScope(scope, () => uniquePaths(Chunk.of(normalizePath(path)))),
-    runFiles: (scope, paths) => runScope(scope, () => uniquePaths(Chunk.map(paths, normalizePath)))
-  })
+    run: (scope: VaultScope) => runScope(scope, selectedPathsFromVault),
+    runFile: (scope: VaultScope, path: string) => runScope(scope, () => uniquePaths(Chunk.of(normalizePath(path)))),
+    runFiles: (scope: VaultScope, paths: Chunk.Chunk<string>) => runScope(scope, () => uniquePaths(Chunk.map(paths, normalizePath)))
+  } as unknown as CheckService)
   serviceRegistry.set(service, { scopedVaultForScope, analyzers })
   return service
 }
 
 export const addCheck =
   (checkImplementation: CheckAnalyzer) =>
-  (self: CheckServiceShape): CheckServiceShape => {
+  (self: CheckService): CheckService => {
     const registered = serviceRegistry.get(self)
     return registered === undefined
       ? make(checkImplementation)
@@ -143,20 +143,20 @@ export const all = (
   archiveHeading: CheckAnalyzer,
   dumpInbox: CheckAnalyzer,
   taskMetadata: CheckAnalyzer
-): CheckServiceShape =>
+): CheckService =>
   make(vaultDiagnostics, linkIntegrity, duplicateHeading, titleDrift, archiveHeading, dumpInbox, taskMetadata)
 
-export const linksOnly = (linkIntegrity: CheckAnalyzer): CheckServiceShape => make(linkIntegrity)
+export const linksOnly = (linkIntegrity: CheckAnalyzer): CheckService => make(linkIntegrity)
 
 export const headingsBundle = (
   duplicateHeading: CheckAnalyzer,
   titleDrift: CheckAnalyzer,
   archiveHeading: CheckAnalyzer
-): CheckServiceShape => make(duplicateHeading, titleDrift, archiveHeading)
+): CheckService => make(duplicateHeading, titleDrift, archiveHeading)
 
-export const tasksOnly = (taskMetadata: CheckAnalyzer): CheckServiceShape => make(taskMetadata)
+export const tasksOnly = (taskMetadata: CheckAnalyzer): CheckService => make(taskMetadata)
 
-export const dumpOnly = (dumpInbox: CheckAnalyzer): CheckServiceShape => make(dumpInbox)
+export const dumpOnly = (dumpInbox: CheckAnalyzer): CheckService => make(dumpInbox)
 
 export const layerAll: Layer.Layer<CheckService, never, VaultService> = CheckService.layer
 
@@ -206,7 +206,7 @@ export const layerDumpOnly: Layer.Layer<CheckService, never, VaultService> = Lay
   })
 ).pipe(Layer.provide(DumpInboxCheckAnalyzer.layer))
 
-const selectedPathsFromVault = (vault: VaultShape): Chunk.Chunk<string> =>
+const selectedPathsFromVault = (vault: Vault): Chunk.Chunk<string> =>
   uniquePaths(
     Chunk.appendAll(
       Chunk.map(notes(vault), (note) => normalizePath(note.path)),
@@ -214,7 +214,7 @@ const selectedPathsFromVault = (vault: VaultShape): Chunk.Chunk<string> =>
     )
   )
 
-const selectedFilesFromVault = (vault: VaultShape, selected: ReadonlySet<string>): Chunk.Chunk<MarkdownFile> => {
+const selectedFilesFromVault = (vault: Vault, selected: ReadonlySet<string>): Chunk.Chunk<MarkdownFile> => {
   let files = Chunk.empty<MarkdownFile>()
   for (const [path, result] of Trie.entries(vault.files)) {
     if (selected.has(normalizePath(path)) && Result.isSuccess(result)) {
@@ -224,7 +224,7 @@ const selectedFilesFromVault = (vault: VaultShape, selected: ReadonlySet<string>
   return files
 }
 
-const diagnosticFindingsFromVault = (vault: VaultShape, selected: ReadonlySet<string>): Chunk.Chunk<CheckFinding> =>
+const diagnosticFindingsFromVault = (vault: Vault, selected: ReadonlySet<string>): Chunk.Chunk<CheckFinding> =>
   Chunk.map(
     Chunk.filter(diagnostics(vault), (diagnostic) => selected.has(normalizePath(diagnostic.path))),
     (diagnostic) =>
@@ -240,17 +240,17 @@ const diagnosticFindingsFromVault = (vault: VaultShape, selected: ReadonlySet<st
 
 const checkContext = (
   scope: VaultScope,
-  vault: VaultShape,
+  vault: Vault,
   selected: (path: string) => boolean
-): CheckContextShape =>
+): CheckContext =>
   CheckContext.of({
     scope,
     vault,
     selected,
     indexes: indexesFromVault(vault)
-  })
+  } as unknown as CheckContext)
 
-const indexesFromVault = (vault: VaultShape): CheckIndexes => {
+const indexesFromVault = (vault: Vault): CheckIndexes => {
   const noteRecords = notes(vault)
   const headingRecords = headings(vault)
   const notesByKey = new Map<string, Chunk.Chunk<string>>()

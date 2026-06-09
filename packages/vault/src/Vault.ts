@@ -8,19 +8,19 @@ import { allMarkdown, VaultScope } from "./VaultScope"
 
 export type VaultFiles = Trie.Trie<Result.Result<MarkdownFile, MarkdownParseError>>
 
-export type VaultShape = {
+export interface Vault {
   readonly scope: VaultScope
   readonly files: VaultFiles
 }
 
-export class Vault extends Context.Service<Vault, VaultShape>()("@kb/vault-core/Vault") {
+export class Vault extends Context.Service<Vault, Vault>()("@kb/vault-core/Vault") {
   static make({
     scope = allMarkdown,
     files
   }: {
     readonly scope?: VaultScope
     readonly files: VaultFiles
-  }): Effect.Effect<VaultShape> {
-    return Effect.succeed(Vault.of({ scope, files }))
+  }): Effect.Effect<Vault> {
+    return Effect.succeed(Vault.of({ scope, files } as Vault))
   }
 }

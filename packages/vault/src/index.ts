@@ -4,7 +4,7 @@ export { MarkdownParser, type MarkdownParserService } from "./markdown/MarkdownP
 export * from "./VaultScope"
 export * as Glob from "./Glob"
 export { VaultService } from "./VaultService"
-export { Vault, type VaultFiles, type VaultShape } from "./Vault"
+export { Vault, type VaultFiles } from "./Vault"
 export {
   diagnostics,
   fencedBlockRecordsForFile,

@@ -20,17 +20,17 @@ import { MarkdownFile } from "./markdown/MarkdownModel"
 import { MarkdownParser } from "./markdown/MarkdownParser"
 import { VaultIoError } from "./VaultErrors"
 import { VaultScope } from "./VaultScope"
-import { Vault, type VaultFiles, type VaultShape } from "./Vault"
+import { Vault, type VaultFiles } from "./Vault"
 
-export type VaultServiceShape = {
+export interface VaultService {
   readonly readText: (path: string) => Effect.Effect<string, VaultIoError>
   readonly writeText: (path: string, contents: string) => Effect.Effect<void, VaultIoError>
   readonly readMarkdown: (path: string) => Effect.Effect<MarkdownFile, VaultIoError | MarkdownParseError>
   readonly readMarkdownFiles: (scope: VaultScope) => Effect.Effect<VaultFiles, VaultIoError>
-  readonly scoped: (scope: VaultScope) => Effect.Effect<VaultShape, VaultIoError>
+  readonly scoped: (scope: VaultScope) => Effect.Effect<Vault, VaultIoError>
 }
 
-export class VaultService extends Context.Service<VaultService, VaultServiceShape>()("@kb/vault-core/VaultService") {
+export class VaultService extends Context.Service<VaultService, VaultService>()("@kb/vault-core/VaultService") {
   static makeLayer({ root }: { readonly root: string }) {
     return Layer.effect(VaultService, makeVaultService(root)).pipe(
       Layer.provide(Layer.mergeAll(MarkdownParser.layer, MarkdownProcessor.layer))
@@ -90,7 +90,7 @@ const makeVaultService = (root: string) =>
       return cached.success
     })
 
-    const readMarkdownFiles: VaultServiceShape["readMarkdownFiles"] = Effect.fn("VaultService.readMarkdownFiles")(
+    const readMarkdownFiles: VaultService["readMarkdownFiles"] = Effect.fn("VaultService.readMarkdownFiles")(
       function* (scope: VaultScope) {
         const patterns = Chunk.toReadonlyArray(Chunk.map(scope.patterns, normalizePath))
         const matches = yield* glob
@@ -148,7 +148,7 @@ const makeVaultService = (root: string) =>
       readMarkdown,
       readMarkdownFiles,
       scoped
-    })
+    } as unknown as VaultService)
   })
 
 const mapIoError = <A>(
@@ -172,7 +172,7 @@ type KbIgnoreRule = {
   readonly matcher: Minimatch
 }
 
-const readKbIgnore = (readText: VaultServiceShape["readText"]): Effect.Effect<ReadonlyArray<KbIgnoreRule>, VaultIoError> =>
+const readKbIgnore = (readText: VaultService["readText"]): Effect.Effect<ReadonlyArray<KbIgnoreRule>, VaultIoError> =>
   readText(".kbignore").pipe(
     Effect.catchIf(isMissingKbIgnore, () => Effect.succeed("")),
     Effect.map(parseKbIgnore)

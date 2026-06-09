@@ -5,13 +5,13 @@ import * as Option from "effect/Option"
 import * as Layer from "effect/Layer"
 import { IsoDate, WeekWindow } from "./TaskModel"
 
-export type CalendarServiceShape = {
+export interface CalendarService {
   readonly today: () => Effect.Effect<IsoDate>
   readonly addDays: (date: IsoDate, days: number) => Effect.Effect<IsoDate>
   readonly window: (start: IsoDate, days: number) => Effect.Effect<WeekWindow>
 }
 
-export class CalendarService extends Context.Service<CalendarService, CalendarServiceShape>()(
+export class CalendarService extends Context.Service<CalendarService, CalendarService>()(
   "@kb/vault-tasks/CalendarService"
 ) {
   static readonly layerLive: Layer.Layer<CalendarService> = Layer.effect(
@@ -36,7 +36,7 @@ const addDays = (date: IsoDate, days: number): IsoDate =>
     onSome: (dateTime) => formatIsoDate(DateTime.add(dateTime, { days }))
   })
 
-function makeCalendarService(today: Effect.Effect<IsoDate>): Effect.Effect<CalendarServiceShape> {
+function makeCalendarService(today: Effect.Effect<IsoDate>): Effect.Effect<CalendarService> {
   return Effect.sync(() =>
     CalendarService.of({
       today: Effect.fn("@kb/vault-tasks/CalendarService.today")(() => today),
@@ -46,7 +46,7 @@ function makeCalendarService(today: Effect.Effect<IsoDate>): Effect.Effect<Calen
       window: Effect.fn("@kb/vault-tasks/CalendarService.window")((start: IsoDate, days: number) =>
         Effect.succeed(makeWindow(start, days))
       )
-    })
+    } as unknown as CalendarService)
   )
 }
 

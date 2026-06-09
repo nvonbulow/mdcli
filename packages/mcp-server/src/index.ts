@@ -1,4 +1,4 @@
-export { KbMcpServer, ReadFileRangeError, type KbMcpServerShape } from "./KbMcpServer"
+export { KbMcpServer, ReadFileRangeError } from "./KbMcpServer"
 export {
   NonNegativeInteger,
   PositiveLine,

@@ -20,20 +20,19 @@ import {
 import { MarkdownProcessor, type MarkdownStringifyError } from "./processor.js"
 import { findAll } from "./visit.js"
 
-type TableOfContentsEntryShape = {
+export interface TableOfContentsEntry {
   readonly heading: HeadingNode
   readonly depth: typeof HeadingLevel.Type
   readonly text: string
-  readonly children: ReadonlyArray<TableOfContentsEntryShape>
+  readonly children: ReadonlyArray<TableOfContentsEntry>
 }
 
-export const TableOfContentsEntry: Schema.Codec<TableOfContentsEntryShape, unknown> = Schema.Struct({
+export const TableOfContentsEntry: Schema.Codec<TableOfContentsEntry, unknown> = Schema.Struct({
   heading: HeadingNodeSchema,
   depth: HeadingLevel,
   text: Schema.String,
-  children: Schema.Array(Schema.suspend((): Schema.Codec<TableOfContentsEntryShape, unknown> => TableOfContentsEntry))
+  children: Schema.Array(Schema.suspend((): Schema.Codec<TableOfContentsEntry, unknown> => TableOfContentsEntry))
 })
-export type TableOfContentsEntry = typeof TableOfContentsEntry.Type
 
 const childrenText = (children: ReadonlyArray<PhrasingContentNode>): string => {
   let text = ""

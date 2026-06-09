@@ -1,7 +1,6 @@
 export * as CheckModel from "./CheckModel"
 export {
   CheckService,
-  type CheckServiceShape,
   type CheckServiceError,
   make,
   addCheck,

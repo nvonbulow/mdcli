@@ -19,6 +19,16 @@ These are intentionally deferred. Do not implement them as part of the current v
   - Add a vault check ignore file, similar to `.gitignore`, for intentional non-note files and specific findings; use it to exclude files such as `AGENTS.md` from note title-drift checks without weakening checks globally.
   - Add regression tests for relative source-copy links, resource `topic` metadata, and ignore-file behavior.
 - [x] P0: set up config file/environment variables (using effect's config system) to set a default vault path instead of assuming `./vault`
+- [ ] P0: Expand recurring tasks into concrete scheduled task instances in task views
+  - `kb task today`, `kb task week`, and related planning queries should account for `[repeat:: ...]` rows even when the source row is completed.
+  - Generate or surface the next expected occurrence for weekly chores/routines such as meal planning, grocery shopping, laundry, bedsheets, water plants, medication, and weekly planning.
+  - Avoid double-counting when an explicit future open instance already exists, such as a manually created next grocery-shopping or vacuuming row.
+  - Make repeat handling deterministic and visible in JSON output so vault workflows do not silently miss recurring obligations.
+- [ ] P0: Support task records as standalone Markdown files
+  - Allow a task to be represented by its own `.md` file, not only as a checkbox/list item inside a project note.
+  - Define how standalone task files expose title/text, completion state, scheduled/due/completed/repeat metadata, area/project/source links, and notes.
+  - Ensure task queries merge standalone task files and inline task items into one consistent result model.
+  - Preserve compatibility with current item-level task rows so migration can be gradual and explicit.
 - [ ] P0: Add a command for checking overdue tasks `kb task overdue`
 - [ ] P0: Allow wikilinks to references headings within the linked file
   - For example `[[#heading]]` links to a heading within the same file. `[[#heading#subheading]]` references a subheading, and `[[Note#heading]]` references a heading in a different file. Checks will need to be updated to follow heading references.

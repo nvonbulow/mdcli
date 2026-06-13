@@ -2,7 +2,7 @@ import { Schema } from "effect"
 import * as Context from "effect/Context"
 import type * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
-import type { DataviewEvaluateError, DataviewTaskQuery } from "./DataviewAst"
+import type { DataviewEvaluateError, DataviewQuery } from "./DataviewAst"
 import type { DataviewRecord } from "./DataviewResult"
 
 export class DataviewRecordSourceError extends Schema.TaggedErrorClass<DataviewRecordSourceError>(
@@ -13,7 +13,7 @@ export class DataviewRecordSourceError extends Schema.TaggedErrorClass<DataviewR
 
 export type DataviewRecordSourceService = {
   readonly recordsFor: (
-    query: DataviewTaskQuery
+    query: DataviewQuery
   ) => Effect.Effect<ReadonlyArray<DataviewRecord>, DataviewEvaluateError | DataviewRecordSourceError>
 }
 

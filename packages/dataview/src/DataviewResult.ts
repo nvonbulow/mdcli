@@ -1,40 +1,55 @@
-import { Data } from "effect"
+import { Schema } from "effect"
 
-export type DataviewScalar = string | number | boolean | null
-export type DataviewValue = DataviewScalar | ReadonlyArray<DataviewScalar>
+export const DataviewScalar = Schema.Union([Schema.String, Schema.Number, Schema.Boolean, Schema.Null])
+export type DataviewScalar = typeof DataviewScalar.Type
 
-export class DataviewRecord extends Data.TaggedClass("Record")<{
-  readonly fields: Readonly<Record<string, DataviewValue>>
-  readonly original: unknown
-}> {}
+export type DataviewObject = Schema.JsonObject
 
-export class DataviewColumn extends Data.TaggedClass("Column")<{
-  readonly key: string
-  readonly label: string
-}> {}
+export const DataviewValue = Schema.Json
+export type DataviewValue = typeof DataviewValue.Type
 
-export class DataviewRow extends Data.TaggedClass("Row")<{
-  readonly cells: Readonly<Record<string, DataviewValue>>
-  readonly record: DataviewRecord
-}> {}
+export class DataviewRecord extends Schema.TaggedClass<DataviewRecord>("@kb/dataview/DataviewRecord")("Record", {
+  fields: Schema.Record(Schema.String, DataviewValue),
+  original: Schema.Unknown
+}) {}
 
-export class DataviewGroup extends Data.TaggedClass("Group")<{
-  readonly key: string
-  readonly label: string
-  readonly rowIndexes: ReadonlyArray<number>
-}> {}
+export class DataviewColumn extends Schema.TaggedClass<DataviewColumn>("@kb/dataview/DataviewColumn")("Column", {
+  key: Schema.String,
+  label: Schema.String
+}) {}
 
-export class DataviewMetadata extends Data.TaggedClass("Metadata")<{
-  readonly query: string
-  readonly source: DataviewValue | undefined
-}> {}
+export class DataviewRow extends Schema.TaggedClass<DataviewRow>("@kb/dataview/DataviewRow")("Row", {
+  cells: Schema.Record(Schema.String, DataviewValue),
+  record: DataviewRecord
+}) {}
 
-export type DataviewResult = Data.TaggedEnum<{
-  readonly QueryResult: {
-    readonly columns: ReadonlyArray<DataviewColumn>
-    readonly rows: ReadonlyArray<DataviewRow>
-    readonly groups: ReadonlyArray<DataviewGroup>
-    readonly metadata: DataviewMetadata
+export class DataviewGroup extends Schema.TaggedClass<DataviewGroup>("@kb/dataview/DataviewGroup")("Group", {
+  key: Schema.String,
+  label: Schema.String,
+  rowIndexes: Schema.Array(Schema.Number)
+}) {}
+
+export class DataviewMetadata extends Schema.TaggedClass<DataviewMetadata>("@kb/dataview/DataviewMetadata")(
+  "Metadata",
+  {
+    query: Schema.String,
+    source: Schema.UndefinedOr(DataviewValue)
   }
-}>
-export const DataviewResult = Data.taggedEnum<DataviewResult>()
+) {}
+
+const DataviewResultSchema = Schema.TaggedUnion({
+  QueryResult: {
+    columns: Schema.Array(DataviewColumn),
+    rows: Schema.Array(DataviewRow),
+    groups: Schema.Array(DataviewGroup),
+    metadata: DataviewMetadata
+  }
+})
+
+export const DataviewResult = Object.assign(DataviewResultSchema, {
+  QueryResult: (
+    input: Parameters<typeof DataviewResultSchema.cases.QueryResult.make>[0],
+    options?: Parameters<typeof DataviewResultSchema.cases.QueryResult.make>[1]
+  ) => DataviewResultSchema.cases.QueryResult.make(input, options)
+})
+export type DataviewResult = typeof DataviewResult.Type

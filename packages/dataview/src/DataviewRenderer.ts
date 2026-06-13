@@ -1,3 +1,4 @@
+import { Schema } from "effect"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
 import * as Context from "effect/Context"
@@ -11,7 +12,8 @@ import type {
   DataviewValue
 } from "./DataviewResult"
 
-export type OutputFormat = "pretty" | "markdown" | "json"
+export const OutputFormat = Schema.Literals(["pretty", "markdown", "json"])
+export type OutputFormat = typeof OutputFormat.Type
 
 export type DataviewRendererService = {
   readonly render: (result: DataviewResult) => Effect.Effect<string, DataviewRenderError>
@@ -114,10 +116,18 @@ const cellText = (value: DataviewValue | undefined): string => {
     return ""
   }
   if (Array.isArray(value)) {
-    return value.map((item) => (item === null ? "" : `${item}`)).join(", ")
+    return value.every(isScalarCell)
+      ? value.map((item) => (item === null ? "" : `${item}`)).join(", ")
+      : (JSON.stringify(value) ?? "")
+  }
+  if (typeof value === "object") {
+    return JSON.stringify(value) ?? ""
   }
   return `${value}`
 }
+
+const isScalarCell = (value: DataviewValue): boolean =>
+  value === null || typeof value === "string" || typeof value === "number" || typeof value === "boolean"
 const prettyCellText = (value: DataviewValue | undefined): string => cellText(value).replaceAll("\n", " ")
 
 const padRight = (value: string, width: number): string =>

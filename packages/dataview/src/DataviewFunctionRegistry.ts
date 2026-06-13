@@ -37,9 +37,10 @@ const dataviewFunctions = (today: string): DataviewFunctions => ({
   contains: (args) => {
     const haystack = args[0]
     const needle = scalarText(args[1] ?? null)
-    return Array.isArray(haystack)
-      ? haystack.some((value) => scalarText(value) === needle)
-      : scalarText(haystack ?? null).includes(needle)
+    if (Array.isArray(haystack)) {
+      return arrayContains(haystack, needle)
+    }
+    return isObjectValue(haystack) ? false : scalarText(haystack ?? null).includes(needle)
   },
   date: (args) => {
     const value = scalarText(args[0] ?? null)
@@ -47,9 +48,20 @@ const dataviewFunctions = (today: string): DataviewFunctions => ({
   }
 })
 
+const arrayContains = (haystack: ReadonlyArray<DataviewValue>, needle: string): boolean =>
+  haystack.some((value) =>
+    Array.isArray(value) ? arrayContains(value as ReadonlyArray<DataviewValue>, needle) : scalarText(value) === needle
+  )
+
 const scalarText = (value: DataviewValue | DataviewScalar): string => {
   if (Array.isArray(value)) {
-    return scalarText(value[0] ?? null)
+    return value.map((item) => scalarText(item)).join(", ")
+  }
+  if (isObjectValue(value)) {
+    return JSON.stringify(value) ?? ""
   }
   return value === null ? "" : `${value}`
 }
+
+const isObjectValue = (value: DataviewValue | DataviewScalar | undefined): boolean =>
+  typeof value === "object" && value !== null && !Array.isArray(value)

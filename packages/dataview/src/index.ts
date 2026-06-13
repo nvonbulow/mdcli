@@ -6,4 +6,4 @@ export { DataviewEvaluator, type DataviewEvaluatorService } from "./DataviewEval
 export { DataviewRecordSource, DataviewRecordSourceError, type DataviewRecordSourceService } from "./DataviewRecordSource"
 export { DataviewFunctionRegistry, type DataviewFunctionRegistryService } from "./DataviewFunctionRegistry"
 export { DataviewProgram, type DataviewProgramService } from "./DataviewProgram"
-export { DataviewRenderer, type DataviewRendererService, type OutputFormat } from "./DataviewRenderer"
+export { DataviewRenderer, OutputFormat, type DataviewRendererService } from "./DataviewRenderer"

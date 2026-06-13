@@ -1,7 +1,14 @@
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
-import type { DataviewEvaluateError, DataviewExpression, DataviewTaskQuery } from "./DataviewAst"
+import {
+  DataviewBinaryOperator,
+  type DataviewEvaluateError,
+  type DataviewExpression,
+  type DataviewQuery,
+  DataviewQueryKind,
+  DataviewSortDirection
+} from "./DataviewAst"
 import {
   DataviewColumn,
   DataviewGroup,
@@ -24,7 +31,7 @@ export type EvaluationContext = {
 export type DataviewEvaluatorService = {
   readonly evaluate: (
     queryText: string,
-    query: DataviewTaskQuery,
+    query: DataviewQuery,
     records: ReadonlyArray<DataviewRecord>,
     context: EvaluationContext
   ) => Effect.Effect<DataviewResultType, DataviewEvaluateError>
@@ -32,7 +39,7 @@ export type DataviewEvaluatorService = {
 
 const evaluate = Effect.fn("DataviewEvaluator.evaluate")(function* (
   queryText: string,
-  query: DataviewTaskQuery,
+  query: DataviewQuery,
   records: ReadonlyArray<DataviewRecord>,
   context: EvaluationContext
 ) {
@@ -40,10 +47,11 @@ const evaluate = Effect.fn("DataviewEvaluator.evaluate")(function* (
     query.predicates.every((predicate) => truthy(evaluateExpression(predicate, record, context)))
   )
   const sorted = sortRecords(filtered, query, context)
-  const rows = sorted.map((record) => new DataviewRow({ cells: record.fields, record }))
+  const limited = query.limit === undefined ? sorted : sorted.slice(0, query.limit)
+  const rows = rowsForQuery(query, limited, context)
   const source = query.source === undefined ? undefined : evaluateExpression(query.source, emptyRecord, context)
   return DataviewResult.QueryResult({
-    columns: columnsFromRows(rows),
+    columns: columnsForQuery(query, rows),
     rows,
     groups: groupsFromRows(rows, query.groupBy?.expression, context),
     metadata: new DataviewMetadata({ query: queryText, source })
@@ -68,7 +76,7 @@ const evaluateExpression = (
 ): DataviewValue => {
   switch (expression._tag) {
     case "Identifier":
-      return record.fields[expression.name] ?? null
+      return lookupField(record.fields, expression.name)
     case "StringLiteral":
       return expression.value
     case "NumberLiteral":
@@ -100,26 +108,28 @@ const evaluateFunctionArg = (
   return value === null && expression._tag === "Identifier" ? expression.name : value
 }
 
-const evaluateBinary = (operator: string, left: DataviewValue, right: DataviewValue): DataviewValue => {
+const evaluateBinary = (
+  operator: DataviewBinaryOperator,
+  left: DataviewValue,
+  right: DataviewValue
+): DataviewValue => {
   switch (operator) {
-    case "AND":
+    case DataviewBinaryOperator.enums.And:
       return truthy(left) && truthy(right)
-    case "OR":
+    case DataviewBinaryOperator.enums.Or:
       return truthy(left) || truthy(right)
-    case "=":
+    case DataviewBinaryOperator.enums.Equal:
       return compare(left, right) === 0
-    case "!=":
+    case DataviewBinaryOperator.enums.NotEqual:
       return compare(left, right) !== 0
-    case ">":
+    case DataviewBinaryOperator.enums.GreaterThan:
       return compare(left, right) > 0
-    case ">=":
+    case DataviewBinaryOperator.enums.GreaterThanOrEqual:
       return compare(left, right) >= 0
-    case "<":
+    case DataviewBinaryOperator.enums.LessThan:
       return compare(left, right) < 0
-    case "<=":
+    case DataviewBinaryOperator.enums.LessThanOrEqual:
       return compare(left, right) <= 0
-    default:
-      return null
   }
 }
 
@@ -153,13 +163,21 @@ const compare = (left: DataviewValue, right: DataviewValue): number => {
   return leftText === rightText ? 0 : leftText < rightText ? -1 : 1
 }
 
-const scalar = (value: DataviewValue): DataviewScalar => (isScalarArray(value) ? (value[0] ?? null) : value)
+const scalar = (value: DataviewValue): DataviewScalar => {
+  if (Array.isArray(value)) {
+    return value.length === 0 ? null : scalar(value[0] as DataviewValue)
+  }
+  return isScalar(value) ? value : null
+}
 const textValue = (value: DataviewScalar): string => (value === null ? "" : `${value}`)
-const isScalarArray = (value: DataviewValue): value is ReadonlyArray<DataviewScalar> => Array.isArray(value)
+const isScalar = (value: DataviewValue): value is DataviewScalar =>
+  value === null || typeof value === "string" || typeof value === "number" || typeof value === "boolean"
+const isJsonObject = (value: DataviewValue): value is Readonly<Record<string, DataviewValue>> =>
+  typeof value === "object" && value !== null && !Array.isArray(value)
 
 const sortRecords = (
   records: ReadonlyArray<DataviewRecord>,
-  query: DataviewTaskQuery,
+  query: DataviewQuery,
   context: EvaluationContext
 ): ReadonlyArray<DataviewRecord> => {
   const copy = [...records]
@@ -170,12 +188,80 @@ const sortRecords = (
         evaluateExpression(term.expression, right, context)
       )
       if (order !== 0) {
-        return term.direction === "DESC" ? -order : order
+        return term.direction === DataviewSortDirection.enums.Desc ? -order : order
       }
     }
     return 0
   })
   return copy
+}
+
+const rowsForQuery = (
+  query: DataviewQuery,
+  records: ReadonlyArray<DataviewRecord>,
+  context: EvaluationContext
+): ReadonlyArray<DataviewRow> => {
+  switch (query.kind) {
+    case DataviewQueryKind.enums.Task:
+      return records.map((record) => new DataviewRow({ cells: record.fields, record }))
+    case DataviewQueryKind.enums.Table:
+      return records.map((record) => new DataviewRow({ cells: projectedCells(query, record, context), record }))
+    case DataviewQueryKind.enums.List:
+      return records.map((record) => new DataviewRow({ cells: projectedCells(query, record, context), record }))
+  }
+}
+
+const projectedCells = (
+  query: DataviewQuery,
+  record: DataviewRecord,
+  context: EvaluationContext
+): Readonly<Record<string, DataviewValue>> => {
+  const cells: Record<string, DataviewValue> = {}
+  const includeFileLink =
+    !query.withoutId ||
+    (query.kind === DataviewQueryKind.enums.List && query.projections.length === 0)
+  if (includeFileLink) {
+    cells["file.link"] = lookupField(record.fields, "file.link")
+  }
+  for (const projection of query.projections) {
+    cells[projection.label] = evaluateExpression(projection.expression, record, context)
+  }
+  return cells
+}
+
+const columnsForQuery = (
+  query: DataviewQuery,
+  rows: ReadonlyArray<DataviewRow>
+): ReadonlyArray<DataviewColumn> => {
+  if (query.kind === DataviewQueryKind.enums.Task) {
+    return columnsFromRows(rows)
+  }
+  const columns: Array<DataviewColumn> = []
+  const includeFileLink =
+    !query.withoutId ||
+    (query.kind === DataviewQueryKind.enums.List && query.projections.length === 0)
+  if (includeFileLink) {
+    columns.push(new DataviewColumn({ key: "file.link", label: "File" }))
+  }
+  for (const projection of query.projections) {
+    columns.push(new DataviewColumn({ key: projection.label, label: projection.label }))
+  }
+  return columns
+}
+
+const lookupField = (fields: Readonly<Record<string, DataviewValue>>, name: string): DataviewValue => {
+  if (Object.prototype.hasOwnProperty.call(fields, name)) {
+    return fields[name] ?? null
+  }
+  const parts = name.split(".")
+  let current: DataviewValue | undefined = fields[parts[0] ?? ""]
+  for (let index = 1; index < parts.length; index += 1) {
+    if (current === undefined || !isJsonObject(current)) {
+      return null
+    }
+    current = current[parts[index] ?? ""]
+  }
+  return current ?? null
 }
 
 const columnsFromRows = (rows: ReadonlyArray<DataviewRow>): ReadonlyArray<DataviewColumn> => {

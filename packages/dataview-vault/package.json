@@ -13,11 +13,13 @@
   },
   "dependencies": {
     "@kb/dataview": "workspace:*",
+    "@kb/markdown-ast": "workspace:*",
     "@kb/vault-core": "workspace:*",
     "@kb/vault-tasks": "workspace:*",
     "effect": "beta"
   },
   "devDependencies": {
+    "@effect/platform-node": "beta",
     "@effect/vitest": "beta",
     "@types/node": "^24.10.1",
     "typescript": "^5.9.3",

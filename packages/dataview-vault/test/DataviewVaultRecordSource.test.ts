@@ -1,14 +1,17 @@
+import { NodeFileSystem, NodePath } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
 import {
   DataviewEvaluator,
   DataviewFunctionRegistry,
   DataviewParser,
   DataviewProgram,
-  DataviewRecordSource,
-  DataviewTaskQuery
+  DataviewQuery,
+  DataviewQueryKind,
+  DataviewRecordSource
 } from "@kb/dataview"
 import { DataviewVaultRecordSource } from "@kb/dataview-vault"
 import {
+  Glob,
   MarkdownModel,
   MarkdownParser,
   Vault,
@@ -17,6 +20,7 @@ import {
   type VaultScope
 } from "@kb/vault-core"
 import { Effect, Layer, Result, Trie } from "effect"
+import { fileURLToPath } from "node:url"
 
 const testVault = {
   "Inbox.md": "- [ ] inbox task #task [scheduled:: 2026-05-20] [area:: [[Ops]]]",
@@ -87,6 +91,23 @@ const programLayer = DataviewProgram.layerNoDeps.pipe(
   Layer.provide(vaultLayer(testVault))
 )
 
+const fixtureVaultRoot = fileURLToPath(new URL("./fixtures/dataview-query-vault", import.meta.url))
+const fixtureVaultLayer = VaultService.makeLayer({ root: fixtureVaultRoot }).pipe(
+  Layer.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer, Glob.layer))
+)
+
+const fixtureProgramLayer = DataviewProgram.layerNoDeps.pipe(
+  Layer.provide(
+    Layer.mergeAll(
+      DataviewParser.layerNoDeps,
+      DataviewVaultRecordSource.layerNoDeps,
+      DataviewEvaluator.layerNoDeps,
+      DataviewFunctionRegistry.layerTest("2026-05-23")
+    )
+  ),
+  Layer.provide(fixtureVaultLayer)
+)
+
 
 describe("DataviewVaultRecordSource", () => {
   it.effect("reads records only from the query source through VaultService", () =>
@@ -125,15 +146,49 @@ SORT scheduled ASC`)
     }).pipe(Effect.provide(programLayer))
   )
 
-  it.effect("preserves DataviewEvaluateError when the query omits FROM", () =>
+  it.effect("returns all task records when the query omits FROM", () =>
     Effect.gen(function* () {
       const recordSource = yield* DataviewRecordSource
-      const error = yield* recordSource
-        .recordsFor(new DataviewTaskQuery({ kind: "TASK", source: undefined, predicates: [], groupBy: undefined, sort: [] }))
-        .pipe(Effect.flip)
+      const records = yield* recordSource.recordsFor(
+        new DataviewQuery({
+          kind: DataviewQueryKind.enums.Task,
+          projections: [],
+          withoutId: false,
+          source: undefined,
+          predicates: [],
+          groupBy: undefined,
+          sort: [],
+          limit: undefined
+        })
+      )
 
-      assert.strictEqual(error._tag, "EvaluateError")
-      assert.strictEqual(error.message, "Dataview query must specify an explicit source")
+      assert.deepStrictEqual(
+        Array.from(records, (record) => record.fields.text).sort(),
+        ["inbox task", "project done", "project later", "project soon"]
+      )
     }).pipe(Effect.provide(recordSourceLayer))
+  )
+
+  it.effect("runs page queries against a fixture vault through DataviewProgram", () =>
+    Effect.gen(function* () {
+      const program = yield* DataviewProgram
+      const result = yield* program.run(`TABLE type, topic, thoughts.rating AS "Thought Rating", mood, file.folder AS Folder, file.tags AS Tags
+FROM #resource
+WHERE rating >= 4
+SORT topic ASC
+LIMIT 1`)
+
+      assert.strictEqual(result._tag, "QueryResult")
+      assert.strictEqual(result.rows.length, 1)
+
+      const row = result.rows[0]!
+      assert.strictEqual(row.record.fields["file.path"], "Resources/Poe.md")
+      assert.strictEqual(row.cells.type, "resource")
+      assert.strictEqual(row.cells.topic, "poems")
+      assert.strictEqual(row.cells["Thought Rating"], 8)
+      assert.strictEqual(row.cells.mood, "gothic")
+      assert.strictEqual(row.cells.Folder, "Resources")
+      assert.deepStrictEqual(row.cells.Tags, ["#book", "#resource", "#resource/poem", "#literature"])
+    }).pipe(Effect.provide(fixtureProgramLayer))
   )
 })

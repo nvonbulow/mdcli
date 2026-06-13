@@ -1,23 +1,29 @@
+import { Schema } from "effect"
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
 import {
+  DataviewBinaryOperator,
   DataviewExpression,
   DataviewGroupTerm,
   DataviewParseError,
+  DataviewProjection,
+  DataviewQuery,
+  DataviewQueryKind,
+  DataviewSortDirection,
   DataviewSortTerm,
-  DataviewTaskQuery,
-  type DataviewExpression as DataviewExpressionType,
-  type SortDirection
+  DataviewUnaryOperator,
+  type DataviewExpression as DataviewExpressionType
 } from "./DataviewAst"
 
 const fromPattern = /^FROM\s+(.+)$/i
 const wherePattern = /^WHERE\s+(.+)$/i
 const groupPattern = /^GROUP\s+BY\s+(.+)$/i
 const sortPattern = /^SORT\s+(.+)$/i
+const limitPattern = /^LIMIT\s+(.+)$/i
 
 export type DataviewParserService = {
-  readonly parse: (queryText: string) => Effect.Effect<DataviewTaskQuery, DataviewParseError>
+  readonly parse: (queryText: string) => Effect.Effect<DataviewQuery, DataviewParseError>
 }
 
 export class DataviewParser extends Context.Service<DataviewParser, DataviewParserService>()(
@@ -31,18 +37,23 @@ export class DataviewParser extends Context.Service<DataviewParser, DataviewPars
 
 const parse = Effect.fn("DataviewParser.parse")((input: string) => parseQuery(input))
 
-const parseQuery = (input: string): Effect.Effect<DataviewTaskQuery, DataviewParseError> => {
+const parseQuery = (input: string): Effect.Effect<DataviewQuery, DataviewParseError> => {
   const lines = queryLines(input)
-  const kind = lines[0]
-  if (kind === undefined) {
+  const head = lines[0]
+  if (head === undefined) {
     return parseFailure(input, "Dataview query is empty", undefined)
+  }
+
+  const parsedHead = parseQueryHead(head)
+  if (parsedHead._tag === "Bad") {
+    return parseFailure(input, parsedHead.message, 1)
   }
 
   let source: DataviewExpressionType | undefined = undefined
   const predicates: Array<DataviewExpressionType> = []
   let groupBy: DataviewGroupTerm | undefined = undefined
   const sort: Array<DataviewSortTerm> = []
-
+  let limit: number | undefined = undefined
   for (let index = 1; index < lines.length; index += 1) {
     const line = lines[index] ?? ""
     const from = fromPattern.exec(line)
@@ -84,12 +95,124 @@ const parseQuery = (input: string): Effect.Effect<DataviewTaskQuery, DataviewPar
       sort.push(...parsed.value)
       continue
     }
+    const limited = limitPattern.exec(line)
+    if (limited !== null) {
+      const parsed = parseLimit(limited[1] ?? "")
+      if (parsed._tag === "Bad") {
+        return parseFailure(input, parsed.message, index + 1)
+      }
+      limit = parsed.value
+      continue
+    }
 
     return parseFailure(input, `Unsupported Dataview statement: ${line}`, index + 1)
   }
 
-  return Effect.succeed(new DataviewTaskQuery({ kind, source, predicates, groupBy, sort }))
+  return Effect.succeed(
+    new DataviewQuery({
+      kind: parsedHead.value.kind,
+      projections: parsedHead.value.projections,
+      withoutId: parsedHead.value.withoutId,
+      source,
+      predicates,
+      groupBy,
+      sort,
+      limit
+    })
+  )
 }
+class QueryHead extends Schema.TaggedClass<QueryHead>("@kb/dataview/DataviewParser/QueryHead")("QueryHead", {
+  kind: DataviewQueryKind,
+  projections: Schema.Array(DataviewProjection),
+  withoutId: Schema.Boolean
+}) {}
+
+const parseQueryHead = (input: string): ParseResult<QueryHead> => {
+  const trimmed = input.trim()
+  const match = /^([A-Za-z]+)\b(.*)$/.exec(trimmed)
+  if (match === null) {
+    return bad(`Unsupported Dataview query type: ${trimmed}`)
+  }
+
+  const kind = (match[1] ?? "").toUpperCase()
+  const rest = (match[2] ?? "").trim()
+  if (kind === "CALENDAR") {
+    return bad("Unsupported Dataview query type: CALENDAR")
+  }
+  if (kind === "TASK") {
+    return rest.length === 0
+      ? ok(new QueryHead({ kind: DataviewQueryKind.enums.Task, projections: [], withoutId: false }), 1)
+      : bad(`Unsupported Dataview statement: ${input}`)
+  }
+  if (kind === "LIST") {
+    return parseProjectionHead(rest, DataviewQueryKind.enums.List, 1)
+  }
+  if (kind === "TABLE") {
+    return parseProjectionHead(rest, DataviewQueryKind.enums.Table, Number.POSITIVE_INFINITY)
+  }
+  return bad(`Unsupported Dataview query type: ${kind}`)
+}
+
+const parseProjectionHead = (
+  input: string,
+  kind: DataviewQueryKind,
+  maximumProjectionCount: number
+): ParseResult<QueryHead> => {
+  const withoutIdPrefix = /^WITHOUT\s+ID\b/i
+  const withoutId = withoutIdPrefix.test(input)
+  const projectionInput = withoutId ? input.replace(withoutIdPrefix, "").trim() : input.trim()
+  const chunks = projectionInput.length === 0 ? [] : splitTopLevelComma(projectionInput)
+  if (chunks.length > maximumProjectionCount) {
+    return bad("LIST supports at most one projection")
+  }
+
+  const projections: Array<DataviewProjection> = []
+  for (const chunk of chunks) {
+    const parsed = parseProjection(chunk)
+    if (parsed._tag === "Bad") {
+      return parsed
+    }
+    projections.push(parsed.value)
+  }
+
+  return ok(new QueryHead({ kind, projections, withoutId }), 1)
+}
+
+const parseProjection = (input: string): ParseResult<DataviewProjection> => {
+  const aliased = trailingAlias(input)
+  const expressionInput = aliased.expression
+  const parsed = parseExpression(expressionInput)
+  if (parsed._tag === "Bad") {
+    return parsed
+  }
+  return ok(
+    new DataviewProjection({
+      expression: parsed.value,
+      label: aliased.label ?? expressionInput.trim()
+    }),
+    parsed.index
+  )
+}
+
+class ProjectionAlias extends Schema.TaggedClass<ProjectionAlias>(
+  "@kb/dataview/DataviewParser/ProjectionAlias"
+)("ProjectionAlias", {
+  expression: Schema.String,
+  label: Schema.UndefinedOr(Schema.String)
+}) {}
+
+const trailingAlias = (input: string): ProjectionAlias => {
+  const match = /\s+AS\s+("[^"]*"|[A-Za-z_#/-][A-Za-z0-9_.#/-]*)\s*$/i.exec(input)
+  if (match === null) {
+    return new ProjectionAlias({ expression: input.trim(), label: undefined })
+  }
+  const labelToken = match[1] ?? ""
+  const label = labelToken.startsWith('"') ? labelToken.slice(1, -1) : labelToken
+  return new ProjectionAlias({ expression: input.slice(0, match.index).trim(), label })
+}
+
+const parseLimit = (input: string): ParseResult<number> =>
+  /^[1-9][0-9]*$/.test(input.trim()) ? ok(Number(input.trim()), 1) : bad("LIMIT must be a positive integer")
 const queryLines = (input: string): ReadonlyArray<string> => {
   const lines = input
     .split(/\r?\n/)
@@ -99,26 +222,36 @@ const queryLines = (input: string): ReadonlyArray<string> => {
     return lines
   }
   return (lines[0] ?? "")
-    .replace(/\s+(FROM|WHERE|GROUP\s+BY|SORT)\s+/gi, "\n$1 ")
+    .replace(/\s+(FROM|WHERE|GROUP\s+BY|SORT|LIMIT)\s+/gi, "\n$1 ")
     .split("\n")
     .map((line) => line.trim())
     .filter((line) => line.length > 0)
 }
 
-type Token =
-  | { readonly _tag: "Identifier"; readonly value: string }
-  | { readonly _tag: "String"; readonly value: string }
-  | { readonly _tag: "Number"; readonly value: number }
-  | { readonly _tag: "Operator"; readonly value: string }
-  | { readonly _tag: "Paren"; readonly value: "(" | ")" }
-  | { readonly _tag: "Comma" }
+const TokenSchema = Schema.TaggedUnion({
+  Identifier: { value: Schema.String },
+  String: { value: Schema.String },
+  Number: { value: Schema.Number },
+  Operator: { value: Schema.String },
+  Paren: { value: Schema.Literals(["(", ")"]) },
+  Comma: {}
+})
+type Token = typeof TokenSchema.Type
 
-type ParseOk<A> = { readonly _tag: "Ok"; readonly value: A; readonly index: number }
-type ParseBad = { readonly _tag: "Bad"; readonly message: string }
+class ParseOkModel extends Schema.TaggedClass<ParseOkModel>("@kb/dataview/DataviewParser/ParseOk")("Ok", {
+  value: Schema.Unknown,
+  index: Schema.Number
+}) {}
+
+class ParseBad extends Schema.TaggedClass<ParseBad>("@kb/dataview/DataviewParser/ParseBad")("Bad", {
+  message: Schema.String
+}) {}
+
+type ParseOk<A> = ParseOkModel & { readonly value: A }
 type ParseResult<A> = ParseOk<A> | ParseBad
 
-const ok = <A>(value: A, index: number): ParseOk<A> => ({ _tag: "Ok", value, index })
-const bad = (message: string): ParseBad => ({ _tag: "Bad", message })
+const ok = <A>(value: A, index: number): ParseOk<A> => new ParseOkModel({ value, index }) as ParseOk<A>
+const bad = (message: string): ParseBad => new ParseBad({ message })
 
 const parseFailure = (
   input: string,
@@ -148,23 +281,23 @@ const tokenize = (input: string): ParseResult<ReadonlyArray<Token>> => {
       continue
     }
     if (char === "(" || char === ")") {
-      tokens.push({ _tag: "Paren", value: char })
+      tokens.push(TokenSchema.cases.Paren.make({ value: char }))
       cursor += 1
       continue
     }
     if (char === ",") {
-      tokens.push({ _tag: "Comma" })
+      tokens.push(TokenSchema.cases.Comma.make({}))
       cursor += 1
       continue
     }
     const two = input.slice(cursor, cursor + 2)
     if (two === ">=" || two === "<=" || two === "!=") {
-      tokens.push({ _tag: "Operator", value: two })
+      tokens.push(TokenSchema.cases.Operator.make({ value: two }))
       cursor += 2
       continue
     }
     if (char === "!" || char === "=" || char === ">" || char === "<") {
-      tokens.push({ _tag: "Operator", value: char })
+      tokens.push(TokenSchema.cases.Operator.make({ value: char }))
       cursor += 1
       continue
     }
@@ -173,26 +306,26 @@ const tokenize = (input: string): ParseResult<ReadonlyArray<Token>> => {
       if (close === -1) {
         return bad("Unterminated string literal")
       }
-      tokens.push({ _tag: "String", value: input.slice(cursor + 1, close) })
+      tokens.push(TokenSchema.cases.String.make({ value: input.slice(cursor + 1, close) }))
       cursor = close + 1
       continue
     }
     const identifier = readIdentifier(input, cursor)
     if (identifier.length > 0 && /[A-Za-z_#/-]/.test(identifier[0] ?? "")) {
-      tokens.push({ _tag: "Identifier", value: identifier })
+      tokens.push(TokenSchema.cases.Identifier.make({ value: identifier }))
       cursor += identifier.length
       continue
     }
     const number = readNumber(input, cursor)
     if (number.length > 0 && number.length === identifier.length) {
-      tokens.push({ _tag: "Number", value: Number(number) })
+      tokens.push(TokenSchema.cases.Number.make({ value: Number(number) }))
       cursor += number.length
       continue
     }
     if (identifier.length === 0) {
       return bad(`Unexpected character: ${char}`)
     }
-    tokens.push({ _tag: "Identifier", value: identifier })
+    tokens.push(TokenSchema.cases.Identifier.make({ value: identifier }))
     cursor += identifier.length
   }
   return ok(tokens, tokens.length)
@@ -230,7 +363,10 @@ const parseOr = (tokens: ReadonlyArray<Token>, index: number): ParseResult<Datav
     if (right._tag === "Bad") {
       return right
     }
-    left = ok(DataviewExpression.Binary({ operator: "OR", left: left.value, right: right.value }), right.index)
+    left = ok(
+      DataviewExpression.Binary({ operator: DataviewBinaryOperator.enums.Or, left: left.value, right: right.value }),
+      right.index
+    )
   }
   return left
 }
@@ -245,7 +381,10 @@ const parseAnd = (tokens: ReadonlyArray<Token>, index: number): ParseResult<Data
     if (right._tag === "Bad") {
       return right
     }
-    left = ok(DataviewExpression.Binary({ operator: "AND", left: left.value, right: right.value }), right.index)
+    left = ok(
+      DataviewExpression.Binary({ operator: DataviewBinaryOperator.enums.And, left: left.value, right: right.value }),
+      right.index
+    )
   }
   return left
 }
@@ -263,14 +402,11 @@ const parseComparison = (tokens: ReadonlyArray<Token>, index: number): ParseResu
   if (right._tag === "Bad") {
     return right
   }
-  return ok(
-    DataviewExpression.Binary({
-      operator: token.value as "=" | "!=" | ">" | ">=" | "<" | "<=",
-      left: left.value,
-      right: right.value
-    }),
-    right.index
-  )
+  const operator = binaryOperator(token.value)
+  if (operator === undefined) {
+    return bad(`Unsupported operator: ${token.value}`)
+  }
+  return ok(DataviewExpression.Binary({ operator, left: left.value, right: right.value }), right.index)
 }
 
 const parseUnary = (tokens: ReadonlyArray<Token>, index: number): ParseResult<DataviewExpressionType> => {
@@ -278,7 +414,7 @@ const parseUnary = (tokens: ReadonlyArray<Token>, index: number): ParseResult<Da
     const operand = parseUnary(tokens, index + 1)
     return operand._tag === "Bad"
       ? operand
-      : ok(DataviewExpression.Unary({ operator: "!", operand: operand.value }), operand.index)
+      : ok(DataviewExpression.Unary({ operator: DataviewUnaryOperator.enums.Not, operand: operand.value }), operand.index)
   }
   return parseCall(tokens, index)
 }
@@ -345,7 +481,7 @@ const parsePrimary = (tokens: ReadonlyArray<Token>, index: number): ParseResult<
 }
 
 const parseSortTerms = (input: string): ParseResult<ReadonlyArray<DataviewSortTerm>> => {
-  const chunks = splitSortTerms(input)
+  const chunks = splitTopLevelComma(input)
   const terms: Array<DataviewSortTerm> = []
   for (const chunk of chunks) {
     const parsed = parseSortTerm(chunk)
@@ -357,17 +493,20 @@ const parseSortTerms = (input: string): ParseResult<ReadonlyArray<DataviewSortTe
   return ok(terms, terms.length)
 }
 
-const splitSortTerms = (input: string): ReadonlyArray<string> => {
+const splitTopLevelComma = (input: string): ReadonlyArray<string> => {
   const chunks: Array<string> = []
   let depth = 0
   let start = 0
+  let inString = false
   for (let index = 0; index < input.length; index += 1) {
     const char = input[index]
-    if (char === "(") {
+    if (char === '"') {
+      inString = !inString
+    } else if (!inString && char === "(") {
       depth += 1
-    } else if (char === ")") {
+    } else if (!inString && char === ")") {
       depth -= 1
-    } else if (char === "," && depth === 0) {
+    } else if (!inString && char === "," && depth === 0) {
       chunks.push(input.slice(start, index).trim())
       start = index + 1
     }
@@ -383,19 +522,41 @@ const parseSortTerm = (input: string): ParseResult<DataviewSortTerm> => {
   if (parsed._tag === "Bad") {
     return parsed
   }
-  return ok(new DataviewSortTerm({ expression: parsed.value, direction: direction ?? "ASC" }), parsed.index)
+  return ok(
+    new DataviewSortTerm({ expression: parsed.value, direction: direction ?? DataviewSortDirection.enums.Asc }),
+    parsed.index
+  )
 }
 
-const trailingDirection = (input: string): SortDirection | undefined => {
+const trailingDirection = (input: string): DataviewSortDirection | undefined => {
   const trimmed = input.trimEnd()
   const upper = trimmed.toUpperCase()
   if (upper.endsWith(" ASC")) {
-    return "ASC"
+    return DataviewSortDirection.enums.Asc
   }
   if (upper.endsWith(" DESC")) {
-    return "DESC"
+    return DataviewSortDirection.enums.Desc
   }
   return undefined
+}
+
+const binaryOperator = (value: string): DataviewBinaryOperator | undefined => {
+  switch (value) {
+    case "=":
+      return DataviewBinaryOperator.enums.Equal
+    case "!=":
+      return DataviewBinaryOperator.enums.NotEqual
+    case ">":
+      return DataviewBinaryOperator.enums.GreaterThan
+    case ">=":
+      return DataviewBinaryOperator.enums.GreaterThanOrEqual
+    case "<":
+      return DataviewBinaryOperator.enums.LessThan
+    case "<=":
+      return DataviewBinaryOperator.enums.LessThanOrEqual
+    default:
+      return undefined
+  }
 }
 
 const isIdentifier = (token: Token | undefined, value: string): boolean =>

@@ -46,6 +46,7 @@ export class Task extends Data.Class<{
   readonly completed?: IsoDate | undefined
   readonly depends?: string | undefined
   readonly repeat?: string | undefined
+  readonly repeatFrom?: string | undefined
   readonly area?: string | undefined
   readonly project?: string | undefined
   readonly source?: MarkdownModel.SourceRef<MarkdownAst.ListItemNode> | undefined
@@ -74,6 +75,7 @@ export class Task extends Data.Class<{
           ...dateField("completed", fields.completed),
           ...(fields.depends === undefined ? {} : { depends: fields.depends }),
           ...(fields.repeat === undefined ? {} : { repeat: fields.repeat }),
+          ...(fields.repeatFrom === undefined ? {} : { repeatFrom: fields.repeatFrom }),
           ...(fields.area === undefined ? {} : { area: fields.area }),
           ...(fields.project === undefined ? {} : { project: fields.project })
         })
@@ -97,6 +99,7 @@ const knownFields: Record<string, true> = {
   completed: true,
   depends: true,
   repeat: true,
+  repeatFrom: true,
   area: true,
   project: true
 }

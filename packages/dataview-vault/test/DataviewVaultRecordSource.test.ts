@@ -19,6 +19,7 @@ import {
   type MarkdownParseError,
   type VaultScope
 } from "@kb/vault-core"
+import { TaskRecurrenceService } from "@kb/vault-tasks"
 import { Effect, Layer, Result, Trie } from "effect"
 import { fileURLToPath } from "node:url"
 
@@ -77,7 +78,9 @@ const matchesScope = (scope: VaultScope, path: string): boolean => {
   }
   return false
 }
-const recordSourceLayer = DataviewVaultRecordSource.layerNoDeps.pipe(Layer.provide(vaultLayer(testVault)))
+const recordSourceLayer = DataviewVaultRecordSource.layerNoDeps.pipe(
+  Layer.provide(Layer.mergeAll(vaultLayer(testVault), TaskRecurrenceService.layerNoDeps))
+)
 
 const programLayer = DataviewProgram.layerNoDeps.pipe(
   Layer.provide(
@@ -88,6 +91,7 @@ const programLayer = DataviewProgram.layerNoDeps.pipe(
       DataviewFunctionRegistry.layerTest("2026-05-23")
     )
   ),
+  Layer.provide(TaskRecurrenceService.layerNoDeps),
   Layer.provide(vaultLayer(testVault))
 )
 
@@ -105,6 +109,7 @@ const fixtureProgramLayer = DataviewProgram.layerNoDeps.pipe(
       DataviewFunctionRegistry.layerTest("2026-05-23")
     )
   ),
+  Layer.provide(TaskRecurrenceService.layerNoDeps),
   Layer.provide(fixtureVaultLayer)
 )
 
@@ -189,6 +194,83 @@ LIMIT 1`)
       assert.strictEqual(row.cells.mood, "gothic")
       assert.strictEqual(row.cells.Folder, "Resources")
       assert.deepStrictEqual(row.cells.Tags, ["#book", "#resource", "#resource/poem", "#literature"])
+    }).pipe(Effect.provide(fixtureProgramLayer))
+  )
+
+  it.effect("expands recurring task records for today-shaped predicates", () =>
+    Effect.gen(function* () {
+      const program = yield* DataviewProgram
+      const result = yield* program.run(`TASK
+FROM "Projects"
+WHERE !completed
+WHERE scheduled = date(2026-06-15) OR due = date(2026-06-15)
+SORT due ASC, scheduled ASC, file.line ASC`)
+
+      assert.deepStrictEqual(
+        result.rows.map((row) => [row.cells.text, row.cells.scheduled, row.cells.due]),
+        [
+          ["Water plants", null, "2026-06-15"],
+          ["Prep report", "2026-06-15", "2026-06-22"]
+        ]
+      )
+    }).pipe(Effect.provide(fixtureProgramLayer))
+  )
+
+  it.effect("expands recurring task records for week-shaped predicates", () =>
+    Effect.gen(function* () {
+      const program = yield* DataviewProgram
+      const result = yield* program.run(`TASK
+FROM "Projects"
+WHERE !completed
+WHERE (scheduled >= date(2026-06-15) AND scheduled <= date(2026-06-21)) OR (due >= date(2026-06-15) AND due <= date(2026-06-21))
+SORT due ASC, scheduled ASC, file.line ASC`)
+
+      assert.deepStrictEqual(
+        result.rows.map((row) => [row.cells.text, row.cells.scheduled, row.cells.due]),
+        [
+          ["Water plants", null, "2026-06-15"],
+          ["Prep report", "2026-06-15", "2026-06-22"]
+        ]
+      )
+    }).pipe(Effect.provide(fixtureProgramLayer))
+  )
+
+  it.effect("projects recurring task records for overdue-shaped predicates", () =>
+    Effect.gen(function* () {
+      const program = yield* DataviewProgram
+      const result = yield* program.run(`TASK
+FROM "Projects"
+WHERE !completed
+WHERE due <= date(2026-06-14)
+SORT due ASC, scheduled ASC, file.line ASC`)
+
+      assert.deepStrictEqual(
+        result.rows.map((row) => [row.cells.text, row.cells.scheduled, row.cells.due]),
+        [
+          ["Unsupported repeat", null, "2026-06-01"],
+          ["Prep report", "2026-06-01", "2026-06-08"],
+          ["Water plants", null, "2026-06-08"]
+        ]
+      )
+    }).pipe(Effect.provide(fixtureProgramLayer))
+  )
+
+  it.effect("does not expand recurring task records for unbounded repeat queries", () =>
+    Effect.gen(function* () {
+      const program = yield* DataviewProgram
+      const result = yield* program.run(`TASK
+FROM "Projects"
+WHERE repeat
+SORT file.line ASC`)
+
+      assert.deepStrictEqual(
+        result.rows.map((row) => [row.cells.text, row.cells.due]),
+        [
+          ["Water plants", "2026-06-01"],
+          ["Prep report", "2026-06-08"],
+          ["Unsupported repeat", "2026-06-01"]
+        ]
+      )
     }).pipe(Effect.provide(fixtureProgramLayer))
   )
 })

@@ -19,60 +19,74 @@ These are intentionally deferred. Do not implement them as part of the current v
   - Add a vault check ignore file, similar to `.gitignore`, for intentional non-note files and specific findings; use it to exclude files such as `AGENTS.md` from note title-drift checks without weakening checks globally.
   - Add regression tests for relative source-copy links, resource `topic` metadata, and ignore-file behavior.
 - [x] P0: set up config file/environment variables (using effect's config system) to set a default vault path instead of assuming `./vault`
-- [ ] P0: Expand recurring tasks into concrete scheduled task instances in task views
-  - `kb task today`, `kb task week`, and related planning queries should account for `[repeat:: ...]` rows even when the source row is completed.
-  - Generate or surface the next expected occurrence for weekly chores/routines such as meal planning, grocery shopping, laundry, bedsheets, water plants, medication, and weekly planning.
-  - Avoid double-counting when an explicit future open instance already exists, such as a manually created next grocery-shopping or vacuuming row.
+- [x] P0: Expand open recurring tasks into concrete scheduled task instances in task views
+  - `kb task today`, `kb task week`, and due/overdue planning queries account for open `[repeat:: ...]` rows.
+  - Completed-source recurrence semantics remain a separate spike because this implementation does not mutate Markdown or generate from completed rows.
+  - Explicit future open rows are not suppressed; generated virtual rows can appear beside them.
   - Make repeat handling deterministic and visible in JSON output so vault workflows do not silently miss recurring obligations.
-- [ ] P0: Support task records as standalone Markdown files
+  - Add checked-in live fixture coverage for recurring-task views so weekly obligations cannot silently disappear again.
+- [ ] P0: Add item-level event records and `kb event today/week/open`
+  - Support list-item events with `[type:: event]`, typed date/start/end fields, and page-level inheritance.
+  - Render agenda/calendar-style views for therapy appointments, psychiatry appointments, SailFest, coffee club, 1:1s, and similar scheduled occurrences.
+  - Keep events out of task overdue, completion, carryover, and checkoff semantics unless they produce a follow-up task.
+  - Add checked-in live fixture coverage that proves events and tasks are projected separately.
+- [ ] P0: Polish overdue task support as `kb task overdue`
+  - Current `kb task due --date <date>` covers open tasks due on or before a date, but closeout workflows need an explicit overdue command.
+  - Keep the semantics focused on open tasks due before or on the chosen date, with deterministic JSON output for closeout prompts.
+  - Add checked-in live fixture coverage for overdue, due-today, and completed-overdue task rows.
+- [ ] P1: Add `kb task similar <text>`
+  - Use deterministic token overlap to prevent duplicate tasks during ingestion.
+  - Compare against open and completed tasks by text, tags, project, area, path, and inline fields.
+  - Add checked-in live fixture coverage for obvious duplicates, unrelated tasks, and stale completed variants.
+- [ ] P1: Support task records as standalone Markdown files
   - Allow a task to be represented by its own `.md` file, not only as a checkbox/list item inside a project note.
   - Define how standalone task files expose title/text, completion state, scheduled/due/completed/repeat metadata, area/project/source links, and notes.
   - Ensure task queries merge standalone task files and inline task items into one consistent result model.
   - Preserve compatibility with current item-level task rows so migration can be gradual and explicit.
-- [ ] P0: Add a command for checking overdue tasks `kb task overdue`
-- [ ] P0: Allow wikilinks to references headings within the linked file
-  - For example `[[#heading]]` links to a heading within the same file. `[[#heading#subheading]]` references a subheading, and `[[Note#heading]]` references a heading in a different file. Checks will need to be updated to follow heading references.
-  - Remark plugin should also be updated to parse new formats accordingly
-- [ ] P0: Add safe `kb note rename <path-or-title> <new-title>`
-  - Resolve source notes uniquely, update path/title/references, preserve aliases where possible, and support dry-run or preview before applying.
+  - Add checked-in live fixture coverage for one-task-per-file notes and inline task rows in the same query.
+- [ ] P1: Allow wikilinks to reference headings within the linked file
+  - Parser support for `[[Note#Heading]]`, `[[#Heading]]`, and block references already exists in the remark plugin and Markdown AST.
+  - Update link checks so heading fragments resolve against headings in the target file or current file, and broken fragments are reported separately from broken note targets.
+  - Preserve current note-target ambiguity checks before validating the heading fragment.
+- [ ] P1: Add deterministic task search
+  - Implement `kb task search <query>` across open and completed tasks by text, tags, project, area, path, and inline fields.
+- [ ] P1: Add `kb tag list`
+  - List observed tags and counts so ingestion can reuse existing tags instead of inventing near-duplicates.
+- [ ] P1: Add project and area discovery commands
+  - Implement `kb project list`, `kb project search <query>`, and `kb area list`.
 - [ ] P1: Add AI weekly/monthly summaries
   - Generate review drafts from daily logs, task history, and project context; keep this separate from deterministic checks.
 - [ ] P1: Add AI missing-follow-up/theme detection
   - Produce suggestions only, not direct edits.
-- [ ] P1: Add logging throughout the codebase (with different levels of course)
-- [ ] P1: Add `kb task similar <text>`
-  - Use deterministic token overlap to prevent duplicate tasks during ingestion.
-- [ ] P1: Add richer fearless metadata edits through the remark plugin
+- [ ] P2: Add safe `kb note rename <path-or-title> <new-title>`
+  - Resolve source notes uniquely, update path/title/references, preserve aliases where possible, and support dry-run or preview before applying.
+- [ ] P2: Add richer fearless metadata edits through the remark plugin
   - Use Markdown AST-aware rewrites for frontmatter, headings, wikilinks, inline fields, and task metadata when deterministic mutations become safe.
-- [ ] P1: Add project and area discovery commands
-  - Implement `kb project list`, `kb project search <query>`, and `kb area list`.
-- [ ] P1: Add `kb tag list`
-  - List observed tags and counts so ingestion can reuse existing tags instead of inventing near-duplicates.
 - [ ] P2: Add resource discovery commands
   - Implement `kb resource list` and `kb resource search <query>` across summaries and saved source copies.
 - [ ] P2: Add resource integrity checks
   - Check orphaned source copies, missing `full_copy` links, missing core import metadata, and duplicate resource summaries.
 - [ ] P2: Add safe `kb resource relink`
   - Reconnect summary notes and source-copy notes only when both sides are known deterministically.
+- [ ] P2: Add logging throughout the codebase
+  - Use explicit levels and keep logs behind services or command boundaries instead of ad-hoc prints.
 - [ ] P3: Add `kb project archive`
   - Move clearly completed projects into archive locations while updating references.
 - [ ] P3: Add guarded `kb task dedupe`
   - Keep preview/manual confirmation until duplicate resolution is deterministic enough to apply safely.
-- [ ] P4: Add item-level event record parsing
-  - Support list-item events with `[type:: event]`, typed date/start/end fields, and page-level inheritance.
-- [ ] P4: Add `kb event today/week/open`
-  - Render agenda/calendar-style views while keeping events out of task overdue, completion, and carryover semantics.
 
 Suggested implementation sequence:
 
-1. `packages/vault` catalog primitives
-2. `kb check links`
-3. `kb check headings`
-4. `kb note rename --dry-run`, then apply mode
-5. `kb task similar`
-6. project/area/resource list and search commands
-7. resource integrity checks
-8. event model and query support
+1. Recurring task instance expansion with live fixture coverage
+2. Event record model and `kb event today/week/open`
+3. Explicit `kb task overdue`
+4. `kb task similar`
+5. Standalone Markdown task-file records
+6. Heading-fragment wikilink validation in checks
+7. `kb task search` and `kb tag list`
+8. Project/area/resource list and search commands
+9. AI weekly/monthly summaries and missing-follow-up suggestions
+10. Safe rename/relink/archive/dedupe operations
 
 ### Command wishlist
 
@@ -98,6 +112,9 @@ Suggested implementation sequence:
   - list resource notes from `vault/40-Resources/` with topic, path, title, and source when available
 - `kb resource search <query>`
   - search resource summaries and saved full-copy extracts
+- `kb task overdue`
+  - focused closeout view for open tasks due before or on a selected date
+  - keep output deterministic for required overdue prompts
 - `kb task search <query>`
   - search open and completed tasks by text, tags, project, area, path, and inline fields
 - `kb task similar <text>`
@@ -105,9 +122,9 @@ Suggested implementation sequence:
 - `kb tag list`
   - list observed tags and counts across tasks and Markdown files
 - `kb event today/week/open`
-  - future explicit event views once events are modeled separately from tasks
   - render agenda-style and calendar-style output from typed event date/time fields
   - keep events out of task completion, overdue, and carryover semantics
+  - cover appointments, scheduled social commitments, and 1:1s without modeling them as tasks
 
 ### Safe deterministic operation ideas
 

@@ -5,7 +5,7 @@ import { MarkdownDataviewRenderer } from "@kb/dataview-markdown"
 import { DataviewVaultRecordSource } from "@kb/dataview-vault"
 import { CheckService } from "@kb/vault-checks"
 import { Glob } from "@kb/vault-core"
-import { CalendarService } from "@kb/vault-tasks"
+import { CalendarService, TaskRecurrenceService } from "@kb/vault-tasks"
 import { Console, Effect } from "effect"
 import { Command } from "effect/unstable/cli"
 import { DashboardCommand } from "./DashboardCommand"
@@ -26,6 +26,7 @@ const KbCommand = KbRoot.pipe(
   Command.provide(DataviewEvaluator.layerNoDeps),
   Command.provide(DataviewFunctionRegistry.layerNoDeps),
   Command.provide(CalendarService.layerLive),
+  Command.provide(TaskRecurrenceService.layerNoDeps),
   Command.provide(CheckService.layer),
   Command.provide((flags) => vaultServiceLayerFromFlags(flags.vault)),
   Command.provide(Glob.layer),

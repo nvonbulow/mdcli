@@ -66,6 +66,16 @@ export const TaskCommand = TaskRoot.pipe(
     ).pipe(Command.withDescription("List open tasks due on or before a date")),
 
     Command.make(
+      "overdue",
+      { date: dateFlag },
+      Effect.fn(function* ({ date }) {
+        const flags = yield* TaskRoot
+        const resolvedDate = yield* resolveDateInput(date, "date")
+        yield* runDataviewForSources(dataviewSourcesFromFlags(flags), (source) => overdueQuery(source, resolvedDate))
+      })
+    ).pipe(Command.withDescription("List overdue open tasks due on or before a date")),
+
+    Command.make(
       "repeat",
       {},
       Effect.fn(function* () {
@@ -110,6 +120,12 @@ WHERE (scheduled >= date(${start}) AND scheduled <= date(${end})) OR (due >= dat
 SORT due ASC, scheduled ASC, area ASC, project ASC, file.link ASC, file.line ASC`
 
 const dueQuery = (source: string, date: IsoDate): string => `TASK
+FROM "${source}"
+WHERE !completed
+WHERE due <= date(${date})
+SORT due ASC, scheduled ASC, area ASC, project ASC, file.link ASC, file.line ASC`
+
+const overdueQuery = (source: string, date: IsoDate): string => `TASK
 FROM "${source}"
 WHERE !completed
 WHERE due <= date(${date})

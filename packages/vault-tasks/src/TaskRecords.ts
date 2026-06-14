@@ -82,6 +82,7 @@ const taskFromNode = (
           ...optionalValue("completed", task.completed),
           ...optionalValue("depends", task.depends),
           ...optionalValue("repeat", task.repeat),
+          ...optionalValue("repeatFrom", task.repeatFrom),
           ...optionalValue("area", task.area),
           ...optionalValue("project", task.project)
         }

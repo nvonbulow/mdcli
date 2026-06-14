@@ -13,7 +13,8 @@
   "dependencies": {
     "@kb/markdown-ast": "workspace:*",
     "@kb/vault-core": "workspace:*",
-    "effect": "beta"
+    "effect": "beta",
+    "rrule": "^2.8.1"
   },
   "devDependencies": {
     "@effect/vitest": "beta",

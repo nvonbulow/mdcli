@@ -26,8 +26,8 @@ const KbCommand = KbRoot.pipe(
   Command.provide(DataviewEvaluator.layerNoDeps),
   Command.provide(DataviewFunctionRegistry.layerNoDeps),
   Command.provide(CalendarService.layerLive),
-  Command.provide(TaskRecurrenceService.layerNoDeps),
   Command.provide(CheckService.layer),
+  Command.provide(TaskRecurrenceService.layerNoDeps),
   Command.provide((flags) => vaultServiceLayerFromFlags(flags.vault)),
   Command.provide(Glob.layer),
   Command.provide((flags) => rendererLayerForFormat(flags.format))

@@ -1,4 +1,4 @@
-import rrule, { type Options as RRuleOptions } from "rrule"
+import RRulePackage, { type Options as RRuleOptions } from "rrule"
 import * as Chunk from "effect/Chunk"
 import * as Context from "effect/Context"
 import * as Data from "effect/Data"
@@ -10,14 +10,14 @@ import * as Option from "effect/Option"
 import { IsoDate, Task } from "./TaskModel"
 import type { VaultTaskRecord } from "./TaskRecords"
 
-const RRule = rrule.RRule
-type RRuleInstance = InstanceType<typeof RRule>
+type RRuleInstance = InstanceType<typeof RRulePackage.RRule>
 
 export interface TaskRecurrenceService {
   readonly expandRecord: (
     record: VaultTaskRecord,
     window: RecurrenceExpansionWindow
   ) => Effect.Effect<Chunk.Chunk<VaultTaskRecord>>
+  readonly parseTask: (task: Task) => Effect.Effect<TaskRecurrenceParseResult>
 }
 
 export class TaskRecurrenceService extends Context.Service<TaskRecurrenceService, TaskRecurrenceService>()(
@@ -26,7 +26,8 @@ export class TaskRecurrenceService extends Context.Service<TaskRecurrenceService
   static readonly layerNoDeps: Layer.Layer<TaskRecurrenceService> = Layer.succeed(
     this,
     TaskRecurrenceService.of({
-      expandRecord: Effect.fn("@kb/vault-tasks/TaskRecurrenceService.expandRecord")(expandRecord)
+      expandRecord: Effect.fn("@kb/vault-tasks/TaskRecurrenceService.expandRecord")(expandRecord),
+      parseTask: Effect.fn("@kb/vault-tasks/TaskRecurrenceService.parseTask")(parseTaskRecurrence)
     } as unknown as TaskRecurrenceService)
   )
 
@@ -45,17 +46,27 @@ export class ParsedTaskRecurrence extends Data.Class<{
   readonly repeatFrom: string | undefined
 }> {}
 
+export type TaskRecurrenceParseResult = Data.TaggedEnum<{
+  readonly NoRepeat: {}
+  readonly Supported: { readonly recurrence: ParsedTaskRecurrence }
+  readonly Unsupported: {
+    readonly original: string
+    readonly reason: "empty" | "when-done" | "parse-error"
+  }
+}>
+export const TaskRecurrenceParseResult = Data.taggedEnum<TaskRecurrenceParseResult>()
+
 function expandRecord(
   record: VaultTaskRecord,
   window: RecurrenceExpansionWindow
 ): Effect.Effect<Chunk.Chunk<VaultTaskRecord>> {
   return Effect.gen(function* () {
-    if (record.task.repeat === undefined || record.task.done) {
+    if (record.task.done) {
       return Chunk.of(record)
     }
 
     const recurrence = yield* parseTaskRecurrence(record.task)
-    if (Option.isNone(recurrence)) {
+    if (recurrence._tag !== "Supported") {
       return Chunk.of(record)
     }
 
@@ -64,7 +75,7 @@ function expandRecord(
       return Chunk.of(record)
     }
 
-    const rule = ruleFromRecurrence(recurrence.value, reference.value)
+    const rule = ruleFromRecurrence(recurrence.recurrence, reference.value)
     if (Option.isNone(rule)) {
       return Chunk.of(record)
     }
@@ -77,36 +88,41 @@ function expandRecord(
   })
 }
 
-const parseTaskRecurrence = (task: Task): Effect.Effect<Option.Option<ParsedTaskRecurrence>> => {
+function parseTaskRecurrence(task: Task): Effect.Effect<TaskRecurrenceParseResult> {
   const repeat = task.repeat
   if (repeat === undefined) {
-    return Effect.succeed(Option.none())
+    return Effect.succeed(TaskRecurrenceParseResult.NoRepeat())
   }
 
   const rruleText = repeat.trim()
-  if (rruleText.length === 0 || rruleText.toLowerCase().endsWith(" when done")) {
-    return Effect.succeed(Option.none())
+  if (rruleText.length === 0) {
+    return Effect.succeed(TaskRecurrenceParseResult.Unsupported({ original: repeat, reason: "empty" }))
+  }
+  if (rruleText.toLowerCase().endsWith(" when done")) {
+    return Effect.succeed(TaskRecurrenceParseResult.Unsupported({ original: repeat, reason: "when-done" }))
   }
 
   return Effect.map(
     Effect.option(
       Effect.try({
-        try: () => RRule.parseText(rruleText),
+        try: () => RRulePackage.RRule.parseText(rruleText),
         catch: () => undefined
       })
     ),
     (options) =>
-      Option.flatMap(options, (value) =>
-        value === null
-          ? Option.none()
-          : Option.some(
-              new ParsedTaskRecurrence({
-                original: repeat,
-                rruleText,
-                repeatFrom: task.repeatFrom === "completion" ? "completion" : undefined
+      Option.match(options, {
+        onNone: () => TaskRecurrenceParseResult.Unsupported({ original: repeat, reason: "parse-error" }),
+        onSome: (value) =>
+          value === null
+            ? TaskRecurrenceParseResult.Unsupported({ original: repeat, reason: "parse-error" })
+            : TaskRecurrenceParseResult.Supported({
+                recurrence: new ParsedTaskRecurrence({
+                  original: repeat,
+                  rruleText,
+                  repeatFrom: task.repeatFrom === "completion" ? "completion" : undefined
+                })
               })
-            )
-      )
+      })
   )
 }
 
@@ -117,7 +133,7 @@ const ruleFromRecurrence = (
   Option.flatMap(dateFromIso(reference), (dtstart) =>
     Option.match(parseOptions(recurrence.rruleText), {
       onNone: () => Option.none(),
-      onSome: (options) => Option.some(new RRule({ ...options, dtstart }))
+      onSome: (options) => Option.some(new RRulePackage.RRule({ ...options, dtstart }))
     })
   )
 
@@ -125,7 +141,7 @@ const parseOptions = (rruleText: string): Option.Option<Partial<RRuleOptions>> =
   const result = Effect.runSync(
     Effect.option(
       Effect.try({
-        try: () => RRule.parseText(rruleText),
+        try: () => RRulePackage.RRule.parseText(rruleText),
         catch: () => undefined
       })
     )

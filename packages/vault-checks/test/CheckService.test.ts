@@ -5,6 +5,7 @@ import { CheckModel, CheckService, make } from "@kb/vault-checks"
 import { MarkdownModel, MarkdownParser, Vault, VaultService, notes } from "@kb/vault-core"
 import * as VaultScope from "@kb/vault-core"
 import { MarkdownParseError, MarkdownProcessor } from "@kb/markdown-ast"
+import { TaskRecurrenceService } from "@kb/vault-tasks"
 
 const testRoot = "/effect-check-test"
 
@@ -89,7 +90,8 @@ const vaultLayer = (state: TestVaultState) =>
     })
   ).pipe(Layer.provide(Layer.mergeAll(MarkdownParser.layer, MarkdownProcessor.layer)))
 
-const checkLayer = (state: TestVaultState) => CheckService.layer.pipe(Layer.provide(vaultLayer(state)))
+const checkLayer = (state: TestVaultState) =>
+  CheckService.layer.pipe(Layer.provide(Layer.mergeAll(vaultLayer(state), TaskRecurrenceService.layerNoDeps)))
 
 const absolutePath = (path: string): string => `${testRoot}/${normalizePath(path)}`
 
@@ -389,8 +391,13 @@ describe("CheckService", () => {
         "Invalid completed date: 2026-13-01",
         "Invalid due date: soon",
         "Invalid scheduled date: 2026-02-30",
+        "Open task has no scheduled, due, or repeat metadata, so planning views will not surface it",
+        "Task area metadata should be a wikilink: Work",
+        "Task project metadata should be a wikilink: Alpha",
         "Open task is missing [area:: ...] metadata",
-        "Open task is missing [project:: ...] metadata"
+        "Open task is missing [project:: ...] metadata",
+        "Open task has no scheduled, due, or repeat metadata, so planning views will not surface it",
+        "Completed task is missing [completed:: YYYY-MM-DD] metadata"
       ])
       assert.deepStrictEqual(
         taskFindings.map((finding) => [finding.path, finding.position?.start.line, finding.triggerPath]),
@@ -398,13 +405,121 @@ describe("CheckService", () => {
           ["Tasks.md", 2, "Tasks.md"],
           ["Tasks.md", 2, "Tasks.md"],
           ["Tasks.md", 2, "Tasks.md"],
+          ["Tasks.md", 2, "Tasks.md"],
+          ["Tasks.md", 2, "Tasks.md"],
+          ["Tasks.md", 2, "Tasks.md"],
           ["Tasks.md", 3, "Tasks.md"],
-          ["Tasks.md", 3, "Tasks.md"]
+          ["Tasks.md", 3, "Tasks.md"],
+          ["Tasks.md", 3, "Tasks.md"],
+          ["Tasks.md", 4, "Tasks.md"]
         ]
       )
     }).pipe(Effect.provide(checkLayer(state)))
   })
 
+
+  it.effect("reports broader task metadata invariants", () => {
+    const state: TestVaultState = {
+      files: {
+        [absolutePath("Tasks.md")]: [
+          "# Tasks",
+          "- [ ] Open completed #task [completed:: 2026-06-01] [scheduled:: 2026-06-02] [area:: [[Personal]]] [project:: [[Admin]]]",
+          "- [x] Done missing completed #task [scheduled:: 2026-06-02] [area:: [[Personal]]] [project:: [[Admin]]]",
+          "- [ ] Floating task #task [area:: [[Personal]]] [project:: [[Admin]]]",
+          "- [ ] Date order #task [scheduled:: 2026-06-20] [due:: 2026-06-19] [area:: [[Personal]]] [project:: [[Admin]]]",
+          "- [ ] Bare links #task [scheduled:: 2026-06-20] [area:: Personal] [project:: Admin] [depends:: Admin#^x] [person:: Jules] [source:: dump-1]",
+          "- [ ] Bad priority #task [scheduled:: 2026-06-20] [priority:: urgent] [area:: [[Personal]]] [project:: [[Admin]]]",
+          "- [ ] Typo field #task [scheduled:: 2026-06-20] [scheduld:: 2026-06-20] [area:: [[Personal]]] [project:: [[Admin]]]"
+        ].join("\n")
+      }
+    }
+
+    return Effect.gen(function* () {
+      const check = yield* CheckService
+      const report = yield* check.run(VaultScope.allMarkdown)
+      const taskFindings = toArray(report.findings).filter((finding) => finding.category === "tasks")
+
+      assert.deepStrictEqual(messages(Chunk.fromIterable(taskFindings)), [
+        "Open task has [completed:: ...] metadata",
+        "Completed task is missing [completed:: YYYY-MM-DD] metadata",
+        "Open task has no scheduled, due, or repeat metadata, so planning views will not surface it",
+        "Task scheduled date is after due date: 2026-06-20 > 2026-06-19",
+        "Task area metadata should be a wikilink: Personal",
+        "Task depends metadata should be a wikilink: Admin#^x",
+        "Task person metadata should be a wikilink: Jules",
+        "Task project metadata should be a wikilink: Admin",
+        "Task source metadata should be a wikilink: dump-1",
+        "Unsupported task priority: urgent",
+        "Unknown task metadata field: scheduld"
+      ])
+    }).pipe(Effect.provide(checkLayer(state)))
+  })
+
+  it.effect("reports recurring tasks that planning views cannot expand", () => {
+    const state: TestVaultState = {
+      files: {
+        [absolutePath("Tasks.md")]: [
+          "# Tasks",
+          "- [ ] Weekly shorthand #task [scheduled:: 2026-06-13] [repeat:: weekly] [area:: [[Personal]]] [project:: [[Home]]]",
+          "- [ ] Friday shorthand #task [scheduled:: 2026-06-19] [due:: 2026-06-19] [repeat:: weekly on Friday] [area:: [[Personal]]] [project:: [[Therapy]]]",
+          "- [ ] When done suffix #task [due:: 2026-06-01] [repeat:: every week when done] [area:: [[Personal]]] [project:: [[Home]]]",
+          "- [ ] No recurrence date #task [repeat:: every week] [area:: [[Personal]]] [project:: [[Home]]]"
+        ].join("\n")
+      }
+    }
+
+    return Effect.gen(function* () {
+      const check = yield* CheckService
+      const report = yield* check.run(VaultScope.allMarkdown)
+      const taskMessages = Array.from(
+        messages(Chunk.fromIterable(toArray(report.findings).filter((finding) => finding.category === "tasks")))
+      ).sort()
+
+      assert.deepStrictEqual(taskMessages, [
+        "Recurring task has no scheduled or due date, so planning views cannot expand it",
+        "Recurring task repeat text is not supported by planning views: every week when done",
+        "Recurring task repeat text is not supported by planning views: weekly",
+        "Recurring task repeat text is not supported by planning views: weekly on Friday"
+      ])
+    }).pipe(Effect.provide(checkLayer(state)))
+  })
+
+  it.effect("reports only the latest completed recurring seed without a future open row", () => {
+    const state: TestVaultState = {
+      files: {
+        [absolutePath("Tasks.md")]: [
+          "# Chores",
+          "- [x] Vacuum floors #task [scheduled:: 2026-05-27] [completed:: 2026-05-27] [repeat:: every 2 weeks on Wednesday] [area:: [[Personal]]] [project:: [[Home Chores]]]",
+          "- [x] Vacuum floors #task [scheduled:: 2026-06-10] [completed:: 2026-06-11] [repeat:: every 2 weeks on Wednesday] [area:: [[Personal]]] [project:: [[Home Chores]]]",
+          "- [x] Water plants #task [scheduled:: 2026-06-09] [completed:: 2026-06-09] [repeat:: every week] [area:: [[Personal]]] [project:: [[Home Chores]]]",
+          "- [ ] Water plants #task [scheduled:: 2026-06-16] [repeat:: every week] [area:: [[Personal]]] [project:: [[Home Chores]]]"
+        ].join("\n")
+      }
+    }
+
+    return Effect.gen(function* () {
+      const check = yield* CheckService
+      const report = yield* check.run(VaultScope.allMarkdown)
+      const recurrenceWarnings = toArray(report.findings).filter(
+        (finding) =>
+          finding.category === "tasks" &&
+          finding.message ===
+            "Completed recurring task has no future open source row, so planning views will not show the next occurrence"
+      )
+
+      assert.deepStrictEqual(summaries(Chunk.fromIterable(recurrenceWarnings)), [
+        [
+          "tasks",
+          "warning",
+          "Tasks.md",
+          3,
+          "Completed recurring task has no future open source row, so planning views will not show the next occurrence",
+          "Tasks.md",
+          []
+        ]
+      ])
+    }).pipe(Effect.provide(checkLayer(state)))
+  })
   it.effect("converts catalog parse diagnostics into catalog findings without failing the report", () => {
     const parseFailure = new MarkdownParseError({ message: "bad markdown", input: "!!!" })
     const state: TestVaultState = {

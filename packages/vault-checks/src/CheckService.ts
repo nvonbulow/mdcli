@@ -21,6 +21,7 @@ import {
   type Vault,
   type VaultScope
 } from "@kb/vault-core"
+import { TaskRecurrenceService, taskRecordsForVaultNoDeps } from "@kb/vault-tasks"
 import type * as VaultCore from "@kb/vault-core"
 import { isArchivePath, normalizeKey } from "./CheckAnalyzerUtils"
 import { CheckContext, CheckFinding, CheckReport } from "./CheckModel"
@@ -42,7 +43,7 @@ type ScopedVaultForScope = (scope: VaultScope) => Effect.Effect<Vault, CheckServ
 type MarkdownFile = MarkdownModel.MarkdownFile
 
 export class CheckService extends Context.Service<CheckService, CheckService>()("@kb/vault-checks/CheckService") {
-  static readonly layerNoDeps: Layer.Layer<CheckService, never, VaultService> = Layer.effect(
+  static readonly layerNoDeps: Layer.Layer<CheckService, never, VaultService | TaskRecurrenceService> = Layer.effect(
     CheckService,
     Effect.gen(function* () {
       const vault = yield* VaultService
@@ -78,7 +79,7 @@ export class CheckService extends Context.Service<CheckService, CheckService>()(
     )
   )
 
-  static readonly layer: Layer.Layer<CheckService, never, VaultService> = CheckService.layerNoDeps
+  static readonly layer: Layer.Layer<CheckService, never, VaultService | TaskRecurrenceService> = CheckService.layerNoDeps
 }
 
 export const make = (...analyzers: ReadonlyArray<CheckAnalyzer>): CheckService =>
@@ -102,7 +103,7 @@ const makeWithScopedVault = (
     const vault = yield* scopedVaultForScope(scope)
     const selectedPaths = uniquePaths(selectedPathsForVault(vault))
     const selected = new Set(Chunk.toReadonlyArray(selectedPaths))
-    const context = checkContext(scope, vault, (path) => selected.has(normalizePath(path)))
+    const context = yield* checkContext(scope, vault, (path) => selected.has(normalizePath(path)))
     const selectedFiles = selectedFilesFromVault(vault, selected)
     const parseFindings = diagnosticFindingsFromVault(vault, selected)
     const analyzerFindings = yield* Effect.forEach(selectedFiles, (file) =>
@@ -158,7 +159,7 @@ export const tasksOnly = (taskMetadata: CheckAnalyzer): CheckService => make(tas
 
 export const dumpOnly = (dumpInbox: CheckAnalyzer): CheckService => make(dumpInbox)
 
-export const layerAll: Layer.Layer<CheckService, never, VaultService> = CheckService.layer
+export const layerAll: Layer.Layer<CheckService, never, VaultService | TaskRecurrenceService> = CheckService.layer
 
 export const layerLinksOnly: Layer.Layer<CheckService, never, VaultService> = Layer.effect(
   CheckService,
@@ -188,7 +189,7 @@ export const layerHeadingsBundle: Layer.Layer<CheckService, never, VaultService>
   )
 )
 
-export const layerTasksOnly: Layer.Layer<CheckService, never, VaultService> = Layer.effect(
+export const layerTasksOnly: Layer.Layer<CheckService, never, VaultService | TaskRecurrenceService> = Layer.effect(
   CheckService,
   Effect.gen(function* () {
     const vault = yield* VaultService
@@ -242,13 +243,17 @@ const checkContext = (
   scope: VaultScope,
   vault: Vault,
   selected: (path: string) => boolean
-): CheckContext =>
-  CheckContext.of({
-    scope,
-    vault,
-    selected,
-    indexes: indexesFromVault(vault)
-  } as unknown as CheckContext)
+): Effect.Effect<CheckContext, MarkdownStringifyError> =>
+  Effect.gen(function* () {
+    const taskRecords = yield* taskRecordsForVaultNoDeps(vault)
+    return CheckContext.of({
+      scope,
+      vault,
+      selected,
+      indexes: indexesFromVault(vault),
+      taskRecords
+    } as unknown as CheckContext)
+  })
 
 const indexesFromVault = (vault: Vault): CheckIndexes => {
   const noteRecords = notes(vault)

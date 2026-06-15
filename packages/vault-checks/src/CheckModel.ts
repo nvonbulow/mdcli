@@ -1,5 +1,6 @@
 import { Chunk, Context, Data } from "effect"
 import type { Vault, VaultScope } from "@kb/vault-core"
+import type { VaultTaskRecord } from "@kb/vault-tasks"
 import { sourceLine as vaultSourceLine } from "@kb/vault-core"
 import type * as VaultCore from "@kb/vault-core"
 
@@ -42,6 +43,7 @@ export interface CheckContext {
   readonly vault: Vault
   readonly selected: (path: string) => boolean
   readonly indexes: CheckIndexes
+  readonly taskRecords: Chunk.Chunk<VaultTaskRecord>
 }
 
 export class CheckContext extends Context.Service<CheckContext, CheckContext>()("@kb/vault-checks/CheckContext") {}
